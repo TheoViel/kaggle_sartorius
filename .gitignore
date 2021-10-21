@@ -17,3 +17,7 @@ input/test/
 dataset/
 datasets/
 *.bin
+*.npy
+*.npz
+input/LIVECell_dataset_2021/
+input/train_semi_supervised/
