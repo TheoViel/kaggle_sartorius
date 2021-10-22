@@ -38,6 +38,7 @@ def train(config, df_train, df_val, fold, log_folder=None):
         config.decoder,
         config.encoder,
         num_classes=config.num_classes,
+        num_classes_cls=config.num_classes_cls,
         encoder_weights=config.encoder_weights,
     ).to(config.device)
     model.zero_grad()
@@ -64,12 +65,12 @@ def train(config, df_train, df_val, fold, log_folder=None):
     print(f"    -> {len(val_dataset)} validation images")
     print(f"    -> {n_parameters} trainable parameters\n")
 
-    meter, history = fit(
+    fit(
         model,
         train_dataset,
         val_dataset,
+        loss_config=config.loss_config,
         optimizer_name=config.optimizer,
-        loss_name=config.loss,
         activation=config.activation,
         epochs=config.epochs,
         batch_size=config.batch_size,
@@ -113,13 +114,9 @@ def validate(df, model, config):
     )
 
     truths = [m[..., 0] for m in dataset.masks]
-
-    del dataset
-    gc.collect()
-
     preds = [remove_padding(p, t) for p, t in zip(preds, truths)]
 
-    preds_instance = preds_to_instance(preds)
+    preds_instance = preds_to_instance(preds, dataset.cell_types)
 
     score = iou_map(truths, preds_instance)
 

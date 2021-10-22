@@ -15,7 +15,7 @@ class SegmentationMeter:
         self.threshold = threshold
         self.reset()
 
-    def update(self, y_batch, preds):
+    def update(self, pred_mask, pred_cls, y_mask, y_cls):
         """
         Updates the metric.
 
@@ -26,8 +26,11 @@ class SegmentationMeter:
         Raises:
             NotImplementedError: Mode not implemented.
         """
-        self.dice += dice_score_tensor(preds, y_batch, threshold=self.threshold) * preds.size(0)
-        self.count += preds.size(0)
+        self.dice += dice_score_tensor(
+            pred_mask, y_mask, threshold=self.threshold
+        ) * pred_mask.size(0)
+        self.tps += (pred_cls.argmax(-1) == y_cls).sum().item()
+        self.count += pred_mask.size(0)
 
     def compute(self):
         """
@@ -36,7 +39,8 @@ class SegmentationMeter:
         Returns:
             dict: Metrics dictionary.
         """
-        self.metrics["dice"] = [self.dice / self.count]
+        self.metrics["dice"] = self.dice / self.count
+        self.metrics["acc"] = self.tps / self.count
         return self.metrics
 
     def reset(self):
@@ -45,7 +49,9 @@ class SegmentationMeter:
         """
         self.dice = 0
         self.count = 0
+        self.tps = 0
         self.metrics = {
-            "dice": [0],
+            "dice": 0,
+            "acc": 0,
         }
         return self.metrics

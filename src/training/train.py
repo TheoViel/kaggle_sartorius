@@ -2,18 +2,17 @@ import time
 import torch
 from transformers import get_linear_schedule_with_warmup
 
-from utils.logger import update_history
 from training.meter import SegmentationMeter
 from training.loader import define_loaders
-from training.optim import define_loss, define_optimizer, prepare_for_loss
+from training.optim import SartoriusLoss, define_optimizer
 
 
 def fit(
     model,
     train_dataset,
     val_dataset,
+    loss_config,
     optimizer_name="Adam",
-    loss_name="BCEWithLogitsLoss",
     activation="sigmoid",
     epochs=50,
     batch_size=32,
@@ -33,7 +32,6 @@ def fit(
         model (torch model): Model to train.
         dataset (InMemoryTrainDataset): Dataset.
         optimizer_name (str, optional): Optimizer name. Defaults to 'adam'.
-        loss_name (str, optional): Loss name. Defaults to 'BCEWithLogitsLoss'.
         activation (str, optional): Activation function. Defaults to 'sigmoid'.
         epochs (int, optional): Number of epochs. Defaults to 50.
         batch_size (int, optional): Training batch size. Defaults to 32.
@@ -52,13 +50,12 @@ def fit(
         pandas dataframe: Training history.
     """
     avg_val_loss = 0.0
-    history = None
 
     scaler = torch.cuda.amp.GradScaler()
 
     optimizer = define_optimizer(optimizer_name, model.parameters(), lr=lr)
 
-    loss_fct = define_loss(loss_name, device=device)
+    loss_fct = SartoriusLoss(loss_config)
 
     train_loader, val_loader = define_loaders(train_dataset, val_dataset)
 
@@ -79,15 +76,13 @@ def fit(
 
         for batch in train_loader:
             x = batch[0].to(device).float()
-            y_batch = batch[1].float()
-            y_batch[:, :2] = (y_batch[:, :2] > 0).float()  # ignore instance id
+            y_mask = batch[1].to(device)
+            y_cls = batch[2].to(device)
 
             with torch.cuda.amp.autocast():
-                y_pred = model(x)
+                pred_mask, pred_cls = model(x)
 
-                y_pred, y_batch = prepare_for_loss(y_pred, y_batch, loss_name, device=device)
-
-                loss = loss_fct(y_pred, y_batch).mean()
+                loss = loss_fct(pred_mask, pred_cls, y_mask, y_cls).mean()
 
                 scaler.scale(loss).backward()
 
@@ -108,29 +103,19 @@ def fit(
             with torch.no_grad():
                 for batch in val_loader:
                     x = batch[0].to(device).float()
-                    y_batch = batch[1].float()
-                    y_batch[:, :2] = (y_batch[:, :2] > 0).float()  # ignore instance id
+                    y_mask = batch[1].to(device)
+                    y_cls = batch[2].to(device)
 
-                    y_pred = model(x)
+                    pred_mask, pred_cls = model(x)
 
-                    y_pred, y_batch = prepare_for_loss(
-                        y_pred,
-                        y_batch,
-                        loss_name,
-                        device=device,
-                        train=False
-                    )
-
-                    loss = loss_fct(y_pred, y_batch).mean()
+                    loss = loss_fct(pred_mask.detach(), pred_cls.detach(), y_mask, y_cls).mean()
 
                     avg_val_loss += loss / len(val_loader)
 
-                    if activation == "sigmoid":
-                        y_pred = torch.sigmoid(y_pred)
-                    elif activation == "softmax":
-                        y_pred = torch.softmax(y_pred, 2)
+                    pred_mask = torch.sigmoid(pred_mask)
+                    pred_cls = torch.softmax(pred_cls, -1)
 
-                    meter.update(y_batch[:, 0], y_pred[:, 0])
+                    meter.update(pred_mask[:, 0], pred_cls, y_mask[:, 0] > 0, y_cls)
 
             metrics = meter.compute()
 
@@ -144,14 +129,14 @@ def fit(
                 end="\t",
             )
             if epoch + 1 >= first_epoch_eval:
-                print(f"val_loss={avg_val_loss:.3f} \t dice={metrics['dice'][0]:.4f}")
+                print(
+                    f"val_loss={avg_val_loss:.3f} \t dice={metrics['dice']:.3f} \t"
+                    f"acc={metrics['acc']:.3f}"
+                )
             else:
                 print("")
-            history = update_history(
-                history, metrics, epoch + 1, avg_loss, avg_val_loss, elapsed_time
-            )
 
-    del (train_loader, val_loader, y_pred, loss, x, y_batch)
+    del (train_loader, val_loader, y_mask, loss, x, y_cls, pred_cls, pred_mask)
     torch.cuda.empty_cache()
 
-    return meter, history
+    return meter

@@ -19,7 +19,7 @@ def define_model(
     decoder_name,
     encoder_name,
     num_classes=1,
-    activation=None,
+    num_classes_cls=0,
     encoder_weights="imagenet",
 ):
     """
@@ -29,8 +29,7 @@ def define_model(
         decoder_name (str): Decoder name.
         encoder_name (str): Encoder name.
         num_classes (int, optional): Number of classes. Defaults to 1.
-        pretrained : pretrained original weights
-        activation (str or None, optional): Activation of the last layer. Defaults to None.
+        pretrained : pretrained original weights.
         encoder_weights (str, optional): Pretrained weights. Defaults to "imagenet".
 
     Returns:
@@ -45,7 +44,8 @@ def define_model(
         encoder_name,
         encoder_weights=encoder_weights,
         classes=num_classes,
-        activation=activation,
+        activation=None,
+        aux_params={"classes": num_classes_cls, "dropout": 0},
     )
     model.num_classes = num_classes
     model.mean = MEAN

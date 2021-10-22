@@ -1,60 +1,7 @@
 import torch
-from training.lovasz import lovasz_loss
+import torch.nn as nn
 
-LOSSES = ["CrossEntropyLoss", "BCELoss", "BCEWithLogitsLoss"]
-
-
-def define_loss(name, device="cuda"):
-    """
-    Defines the loss function associated to the name.
-    Supports losses in the LOSSES list, as well as the Lovasz, Softdice and Haussdorf losses.
-
-    Args:
-        name (str): Loss name.
-        device (str, optional): Device for torch. Defaults to "cuda".
-
-    Raises:
-        NotImplementedError: Specified loss name is not supported.
-
-    Returns:
-        torch loss: Loss function
-    """
-    if name in LOSSES:
-        loss = getattr(torch.nn, name)(reduction="none")
-    elif name == "lovasz":
-        loss = lovasz_loss
-    else:
-        raise NotImplementedError
-
-    return loss
-
-
-def prepare_for_loss(y_pred, y_batch, loss, device="cuda", train=True):
-    """
-    Reformats predictions to fit a loss function.
-
-    Args:
-        y_pred (torch tensor): Predictions.
-        y_batch (torch tensor): Truths.
-        loss (str): Name of the loss function.
-        device (str, optional): Device for torch. Defaults to "cuda".
-        train (bool, optional): Whether it is the training phase. Defaults to True.
-    Raises:
-        NotImplementedError: Specified loss name is not supported.
-
-    Returns:
-        torch tensor: Reformated predictions
-        torch tensor: Reformated truths
-    """
-
-    if loss in ["BCEWithLogitsLoss", "lovasz", "HaussdorfLoss", "SoftDiceLoss"]:
-        y_batch = y_batch.to(device)
-        if not train:
-            y_pred = y_pred.detach()
-    else:
-        raise NotImplementedError
-
-    return y_pred, y_batch
+from training.losses import SmoothCrossEntropyLoss, FocalTverskyLoss   # lovasz_loss
 
 
 def define_optimizer(name, params, lr=1e-3):
@@ -79,3 +26,70 @@ def define_optimizer(name, params, lr=1e-3):
         raise NotImplementedError
 
     return optimizer
+
+
+class SartoriusLoss(nn.Module):
+    """
+    Loss for the problem
+    """
+    def __init__(self, config):
+        """
+        Constructor
+        Args:
+            config (dict): Loss config.
+        """
+        super().__init__()
+        self.bce = nn.BCEWithLogitsLoss(reduction="none")
+        self.ce = SmoothCrossEntropyLoss()
+        self.focal_tversky = FocalTverskyLoss()
+
+        self.w_seg_loss = config["w_seg_loss"]
+        self.w_bce = config["w_bce"]
+
+    def compute_seg_loss(self, pred, truth):
+        """
+        Computes the auxiliary segmentation loss.
+        Args:
+            preds (list of torch tensors [BS x h_i x w_i]): Predicted masks.
+            truth (torch tensor [BS x H x W]): Ground truth mask.
+        Returns:
+            torch tensor [BS]: Loss value.
+        """
+        truth[:, :2] = (truth[:, :2] > 0).float()  # ignore instance id
+        loss = self.w_bce * self.bce(pred, truth).mean((2, 3))  # BS x C
+
+        if self.w_bce < 1:
+            # Focal tversky for contours & masks
+            loss[:, :2] += (1 - self.w_bce) * self.focal_tversky(pred[:, :2], truth[:, :2])
+
+        return loss.mean(-1)
+
+    def compute_cls_loss(self, pred, truth):
+        """
+        Computes the study loss. Handles mixup / cutmix.
+        Args:
+            preds (list of torch tensors or torch tensor [BS x num_classes]): Predictions.
+            truth (torch tensor [BS x num_classes]): Ground truth.
+        Returns:
+            torch tensor [BS]: Loss value.
+        """
+        return self.ce(pred, truth.long())
+
+    def __call__(
+        self, pred_mask, pred_cls, y_mask, y_cls
+    ):
+        """
+        Computes the overall loss.
+        Args:
+
+        Returns:
+            torch tensor [BS]: Loss value.
+        """
+        seg_loss = self.compute_seg_loss(pred_mask, y_mask)
+
+        if self.w_seg_loss < 1:
+            cls_loss = self.compute_cls_loss(pred_cls, y_cls)
+        else:
+            cls_loss = 0
+
+        return self.w_seg_loss * seg_loss + (1 - self.w_seg_loss) * cls_loss

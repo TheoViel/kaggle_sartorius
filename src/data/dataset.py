@@ -1,6 +1,9 @@
 import cv2
+import torch
 import numpy as np
 from torch.utils.data import Dataset
+
+from params import CELL_TYPES
 
 
 class SartoriusDataset(Dataset):
@@ -25,6 +28,9 @@ class SartoriusDataset(Dataset):
         self.mask_paths = df["mask_path"].values
 
         self.masks = [np.load(path).transpose(1, 2, 0).astype(np.int16) for path in self.mask_paths]
+        self.cell_types = df["cell_type"].values
+
+        self.y_cls = [CELL_TYPES.index(c) for c in self.cell_types]
 
     def __len__(self):
         return self.df.shape[0]
@@ -42,4 +48,6 @@ class SartoriusDataset(Dataset):
 
         masks[-1] = masks[-1] / 10000.
 
-        return image, masks
+        y = torch.tensor(self.y_cls[idx])
+
+        return image, masks, y

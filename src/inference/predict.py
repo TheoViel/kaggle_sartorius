@@ -1,7 +1,8 @@
 import torch
 from torch.utils.data import DataLoader
+from tqdm.notebook import tqdm  # noqa
 
-FLIPS = [[-1], [-2], [-2, -1]]
+from params import NUM_WORKERS
 
 
 def get_flip_tta(x, use_rot=False):
@@ -44,21 +45,24 @@ def predict(dataset, model, tta_fct=None, activation="sigmoid", device="cuda"):
     Returns:
         torch tensor [H x W]: Prediction on the image.
     """
-    loader = DataLoader(dataset, batch_size=1, shuffle=False, pin_memory=True)
+    loader = DataLoader(
+        dataset, batch_size=1, shuffle=False, pin_memory=True, num_workers=NUM_WORKERS
+    )
     preds = []
 
     model.eval()
     with torch.no_grad():
-        for x, _ in loader:
+        # for x, _, _ in tqdm(loader):
+        for x, _, _ in loader:
             x = x.to(device)
 
             if tta_fct is not None:
                 y_pred = []
                 x_tta = tta_fct(x)
                 x_tta = torch.cat(x_tta, 0)
-                y_pred = model(x_tta).detach().mean(0)
+                y_pred = model(x_tta)[0].detach().mean(0)
             else:
-                y_pred = model(x).detach()[0]
+                y_pred = model(x)[0].detach()[0]
 
             if activation == "sigmoid":
                 y_pred = torch.sigmoid(y_pred)

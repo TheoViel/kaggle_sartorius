@@ -1,6 +1,5 @@
-# Adapted from https://github.com/bermanmaxim/LovaszSoftmax
-
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.autograd import Variable
@@ -72,6 +71,7 @@ def symmetric_lovasz(outputs, targets):
 
 def lovasz_loss(x, y):
     """
+    From https://github.com/bermanmaxim/LovaszSoftmax
     Computes the symetric lovasz for each class.
 
     Args:
@@ -82,3 +82,44 @@ def lovasz_loss(x, y):
         torch tensor [BS]: Loss values.
     """
     return symmetric_lovasz(x, y)
+
+
+class FocalTverskyLoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(FocalTverskyLoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1, alpha=0.35, beta=0.65, gamma=2):
+        # larger betas weight recall more than precision  - # alpha=0.3, beta=0.7
+        bs, c, _, _ = inputs.size()
+
+        inputs = torch.sigmoid(inputs)
+        inputs = inputs.reshape(bs * c, -1)
+        targets = targets.reshape(bs * c, -1)
+
+        tp = (inputs * targets).sum(-1)
+        fp = ((1 - targets) * inputs).sum(-1)
+        fn = (targets * (1 - inputs)).sum(-1)
+
+        tversky = (tp + smooth) / (tp + alpha * fp + beta * fn + smooth)
+        tversky = (1 - tversky) ** gamma
+
+        return tversky.reshape(bs, c)
+
+
+class SmoothCrossEntropyLoss(nn.Module):
+    def __init__(self, eps=0):
+        super(SmoothCrossEntropyLoss, self).__init__()
+        self.eps = eps
+
+    def forward(self, inputs, targets):
+        if len(targets.size()) == 1:  # to one hot
+            targets = torch.zeros_like(inputs).scatter(1, targets.view(-1, 1).long(), 1)
+
+        if self.eps > 0:
+            n_class = inputs.size(1)
+            targets = targets * (1 - self.eps) + (1 - targets) * self.eps / (n_class - 1)
+
+        loss = - targets * F.log_softmax(inputs, dim=1)
+        loss = loss.sum(-1)
+
+        return loss
