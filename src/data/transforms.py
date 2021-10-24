@@ -144,6 +144,9 @@ def get_transfos(size=SIZE, augment=True, visualize=False, mean=MEAN, std=STD, )
         return albu.Compose(
             [
                 albu.CenterCrop(size, size),
+                # albu.PadIfNeeded(
+                #     min_height=None, min_width=None, pad_height_divisor=32, pad_width_divisor=32
+                # ),
                 normalizer,
             ]
         )

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from training.losses import SmoothCrossEntropyLoss, FocalTverskyLoss   # lovasz_loss
+from training.losses import SmoothCrossEntropyLoss, FocalTverskyLoss, lovasz_loss, DiceLoss
 
 
 def define_optimizer(name, params, lr=1e-3):
@@ -42,9 +42,15 @@ class SartoriusLoss(nn.Module):
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
         self.ce = SmoothCrossEntropyLoss()
         self.focal_tversky = FocalTverskyLoss()
+        self.lovasz = lovasz_loss
+        self.dice = DiceLoss()
 
         self.w_seg_loss = config["w_seg_loss"]
+
         self.w_bce = config["w_bce"]
+        self.w_dice = config["w_dice"]
+        self.w_focal = config["w_focal"]
+        self.w_lovasz = config["w_lovasz"]
 
     def compute_seg_loss(self, pred, truth):
         """
@@ -56,13 +62,22 @@ class SartoriusLoss(nn.Module):
             torch tensor [BS]: Loss value.
         """
         truth[:, :2] = (truth[:, :2] > 0).float()  # ignore instance id
-        loss = self.w_bce * self.bce(pred, truth).mean((2, 3))  # BS x C
 
-        if self.w_bce < 1:
-            # Focal tversky for contours & masks
-            loss[:, :2] += (1 - self.w_bce) * self.focal_tversky(pred[:, :2], truth[:, :2])
+        loss = 0
+        for i in range(3):
+            if self.w_bce[i]:
+                loss += self.w_bce[i] * self.bce(pred[:, i], truth[:, i]).mean((1, 2))
 
-        return loss.mean(-1)
+            if self.w_focal[i]:
+                loss += self.w_focal[i] * self.focal_tversky(pred[:, i], truth[:, i]).mean(-1)
+
+            if self.w_lovasz[i]:
+                loss += self.w_lovasz[i] * self.lovasz(pred[:, i], truth[:, i])
+
+            if self.w_dice[i]:
+                loss += self.w_dice[i] * self.dice(pred[:, i], truth[:, i])
+
+        return torch.div(loss, 3)
 
     def compute_cls_loss(self, pred, truth):
         """

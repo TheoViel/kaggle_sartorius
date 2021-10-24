@@ -90,6 +90,11 @@ class FocalTverskyLoss(nn.Module):
 
     def forward(self, inputs, targets, smooth=1, alpha=0.35, beta=0.65, gamma=2):
         # larger betas weight recall more than precision  - # alpha=0.3, beta=0.7
+        if len(inputs.size()) == 3:
+            inputs = inputs.unsqueeze(1)
+        if len(targets.size()) == 3:
+            targets = targets.unsqueeze(1)
+
         bs, c, _, _ = inputs.size()
 
         inputs = torch.sigmoid(inputs)
@@ -123,3 +128,24 @@ class SmoothCrossEntropyLoss(nn.Module):
         loss = loss.sum(-1)
 
         return loss
+
+
+class DiceLoss(nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(DiceLoss, self).__init__()
+
+    def forward(self, inputs, targets, smooth=1):
+        if len(inputs.size()) == 3:
+            inputs = inputs.unsqueeze(1)
+        if len(targets.size()) == 3:
+            targets = targets.unsqueeze(1)
+
+        bs, c, h, w = targets.size()
+
+        inputs = inputs.view(bs * c, -1).sigmoid()
+        targets = targets.view(bs * c, -1)
+
+        intersection = (inputs * targets).sum(-1)
+        dice = (2. * intersection + smooth) / (inputs.sum(-1) + targets.sum(-1) + smooth)
+
+        return 1 - dice.view(bs, c).sum(-1)

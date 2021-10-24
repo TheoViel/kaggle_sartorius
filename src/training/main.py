@@ -9,11 +9,13 @@ from data.preparation import prepare_data
 from data.transforms import get_transfos, get_transfos_inference
 from data.dataset import SartoriusDataset
 
-from inference.predict import predict, get_flip_tta
+from inference.predict import predict
 from inference.post_process import preds_to_instance, remove_padding
 
 from utils.torch import seed_everything, count_parameters, save_model_weights
 from utils.metrics import iou_map
+
+from params import CELL_TYPES, ORIG_SIZE
 
 
 def train(config, df_train, df_val, fold, log_folder=None):
@@ -70,8 +72,8 @@ def train(config, df_train, df_val, fold, log_folder=None):
         train_dataset,
         val_dataset,
         loss_config=config.loss_config,
+        activations=config.activations,
         optimizer_name=config.optimizer,
-        activation=config.activation,
         epochs=config.epochs,
         batch_size=config.batch_size,
         val_bs=config.val_bs,
@@ -108,16 +110,22 @@ def validate(df, model, config):
         transforms=get_transfos_inference(mean=model.mean, std=model.std),
     )
 
-    tta_fct = get_flip_tta if config.use_tta else None
-    preds = predict(
-        dataset, model, tta_fct=tta_fct, activation=config.activation, device=config.device
+    preds, preds_cls = predict(
+        dataset,
+        model,
+        activations=config.activations,
+        batch_size=config.val_bs,
+        use_tta=config.use_tta,
+        device=config.device
     )
 
+    preds = remove_padding(preds, ORIG_SIZE)
+
+    pred_cell_types = [CELL_TYPES[i] for i in preds_cls.argmax(-1)]
+
+    preds_instance = preds_to_instance(preds, pred_cell_types)
+
     truths = [m[..., 0] for m in dataset.masks]
-    preds = [remove_padding(p, t) for p, t in zip(preds, truths)]
-
-    preds_instance = preds_to_instance(preds, dataset.cell_types)
-
     score = iou_map(truths, preds_instance)
 
     print(f'\n -> Validation IoU mAP = {score:.3f}')
@@ -152,15 +160,18 @@ def k_fold(config, log_folder=None):
             model = train(config, df_train, df_val, i, log_folder=log_folder)
             preds, preds_instance, truths = validate(df_val, model, config)
 
-            all_preds += preds
+            all_preds += [p for p in preds]
             all_preds_instance += preds_instance
             all_truths += truths
 
             if log_folder is None or len(config.selected_folds) == 1:
                 break
 
-            del (model, preds_instance, truths)
+            del (model, preds_instance, truths, preds)
             torch.cuda.empty_cache()
             gc.collect()
+
+    cv_score = iou_map(all_truths, all_preds_instance, verbose=0)
+    print(f'\n -> CV IoU mAP : {cv_score:.3f}')
 
     return all_preds, all_preds_instance, all_truths

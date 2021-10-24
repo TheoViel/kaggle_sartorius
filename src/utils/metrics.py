@@ -120,11 +120,15 @@ def compute_iou(labels, y_pred):
     Returns:
         np array: IoU matrix, of size true_objects x pred_objects.
     """
-    labels, _, _ = skimage.segmentation.relabel_sequential(labels)
-    y_pred, _, _ = skimage.segmentation.relabel_sequential(y_pred)
 
     true_objects = len(np.unique(labels))
     pred_objects = len(np.unique(y_pred))
+
+    if true_objects != labels.max() + 1:
+        labels, _, _ = skimage.segmentation.relabel_sequential(labels)
+
+    if pred_objects != y_pred.max() + 1:
+        y_pred, _, _ = skimage.segmentation.relabel_sequential(y_pred)
 
     # Compute intersection between all objects
     intersection = np.histogram2d(
@@ -140,7 +144,8 @@ def compute_iou(labels, y_pred):
     # Compute union
     union = area_true + area_pred - intersection
 
-    return intersection / (union + 1e-6)
+    iou = intersection / (union + 1e-6)
+    return iou[1:, 1:]
 
 
 def precision_at(threshold, iou):

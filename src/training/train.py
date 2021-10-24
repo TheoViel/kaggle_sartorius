@@ -5,6 +5,7 @@ from transformers import get_linear_schedule_with_warmup
 from training.meter import SegmentationMeter
 from training.loader import define_loaders
 from training.optim import SartoriusLoss, define_optimizer
+from inference.predict import compute_activations
 
 
 def fit(
@@ -12,8 +13,8 @@ def fit(
     train_dataset,
     val_dataset,
     loss_config,
+    activations={},
     optimizer_name="Adam",
-    activation="sigmoid",
     epochs=50,
     batch_size=32,
     val_bs=32,
@@ -32,7 +33,7 @@ def fit(
         model (torch model): Model to train.
         dataset (InMemoryTrainDataset): Dataset.
         optimizer_name (str, optional): Optimizer name. Defaults to 'adam'.
-        activation (str, optional): Activation function. Defaults to 'sigmoid'.
+        activations (str, optional): Activation functions. Defaults to 'sigmoid'.
         epochs (int, optional): Number of epochs. Defaults to 50.
         batch_size (int, optional): Training batch size. Defaults to 32.
         val_bs (int, optional): Validation batch size. Defaults to 32.
@@ -112,8 +113,7 @@ def fit(
 
                     avg_val_loss += loss / len(val_loader)
 
-                    pred_mask = torch.sigmoid(pred_mask)
-                    pred_cls = torch.softmax(pred_cls, -1)
+                    pred_mask, pred_cls = compute_activations(pred_mask, pred_cls, activations)
 
                     meter.update(pred_mask[:, 0], pred_cls, y_mask[:, 0] > 0, y_cls)
 

@@ -22,3 +22,5 @@ CELL_TYPES = ['shsy5y', 'astro', 'cort']
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 SIZE = 256
+
+ORIG_SIZE = (520, 704)
