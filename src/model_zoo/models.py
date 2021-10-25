@@ -1,5 +1,8 @@
+import torch
 import segmentation_models_pytorch
+
 from segmentation_models_pytorch.encoders import encoders
+
 from params import MEAN, STD
 
 DECODERS = [
@@ -21,6 +24,7 @@ def define_model(
     num_classes=1,
     num_classes_cls=0,
     encoder_weights="imagenet",
+    reduce_stride=False,
 ):
     """
     Loads a segmentation architecture.
@@ -50,4 +54,21 @@ def define_model(
     model.num_classes = num_classes
     model.mean = MEAN
     model.std = STD
+
+    if reduce_stride:
+        model.encoder.conv1.stride = (1, 1)
+        last_block = model.decoder.blocks[-1]
+        last_block.forward = lambda x, skip: forward_no_up(last_block, x, skip)
+
     return model
+
+
+def forward_no_up(self, x, skip=None):
+    # x = F.interpolate(x, scale_factor=2, mode="nearest")
+    if skip is not None:
+        x = torch.cat([x, skip], dim=1)
+        x = self.attention1(x)
+    x = self.conv1(x)
+    x = self.conv2(x)
+    x = self.attention2(x)
+    return x

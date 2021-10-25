@@ -42,6 +42,7 @@ def train(config, df_train, df_val, fold, log_folder=None):
         num_classes=config.num_classes,
         num_classes_cls=config.num_classes_cls,
         encoder_weights=config.encoder_weights,
+        reduce_stride=config.reduce_stride,
     ).to(config.device)
     model.zero_grad()
 
@@ -128,7 +129,7 @@ def validate(df, model, config):
     truths = [m[..., 0] for m in dataset.masks]
     score = iou_map(truths, preds_instance)
 
-    print(f'\n -> Validation IoU mAP = {score:.3f}')
+    print(f' -> Validation IoU mAP = {score:.3f}')
 
     return preds, preds_instance, truths
 

@@ -58,7 +58,9 @@ def fit(
 
     loss_fct = SartoriusLoss(loss_config)
 
-    train_loader, val_loader = define_loaders(train_dataset, val_dataset)
+    train_loader, val_loader = define_loaders(
+        train_dataset, val_dataset, batch_size=batch_size, val_bs=val_bs
+    )
 
     meter = SegmentationMeter()
 
