@@ -5,11 +5,13 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 
 from scipy import ndimage
+from mmdet.core import BitmapMasks
+from matplotlib.patches import Rectangle
 
 from utils.metrics import compute_iou
 
 
-def plot_sample(img, mask=None, width=1, plotly=False):
+def plot_sample(img, mask=None, boxes=[], width=1, plotly=False):
     """
     Plots the contours of a given mask.
 
@@ -29,18 +31,40 @@ def plot_sample(img, mask=None, width=1, plotly=False):
         img = np.stack([img, img, img], -1)
 
     img_ = img.copy()
+
+    colors = []
+
+    if isinstance(mask, BitmapMasks):
+        mask = mask.masks
+        for i in range(len(mask)):
+            mask[i] *= (i + 1)
+
+    if len(mask.shape) == 3:
+        mask = mask.max(0)
+
     if mask is not None:
         for i in range(1, int(np.max(mask)) + 1):
             m = ((mask == i) * 255).astype(np.uint8)
             color = tuple(np.random.random(size=3))
+            colors.append(color)
 
             contours, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
             cv2.polylines(img_, contours, True, color, width)
 
+    if not plotly:
+        plt.imshow(img_)
+
+        # Add boxes
+        for i, box in enumerate(boxes):
+            color = colors[i] if len(colors) else tuple(np.random.random(size=3))
+            rect = Rectangle(
+                (box[0], box[1]), box[2] - box[0], box[3] - box[1],
+                linewidth=1, edgecolor=color, facecolor='none', alpha=0.5
+            )
+            plt.gca().add_patch(rect)
+
     if plotly:
         return px.imshow(img_)
-    else:
-        plt.imshow(img_)
 
 
 def get_centers(mask):

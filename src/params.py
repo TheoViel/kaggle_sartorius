@@ -11,13 +11,12 @@ TRAIN_IMG_PATH = DATA_PATH + "train/"
 LOG_PATH = "../logs/"
 OUT_PATH = "../output/"
 
-CLASSES = ["cell"]
-NUM_CLASSES = len(CLASSES)
-
 MEAN = np.array([0.66437738, 0.50478148, 0.70114894])
 STD = np.array([0.15825711, 0.24371008, 0.13832686])
 
-CELL_TYPES = ['shsy5y', 'astro', 'cort']
+CELL_TYPES = ["shsy5y", "astro", "cort"]
+# CLASSES = ["cell"]
+NUM_CLASSES = len(CELL_TYPES)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

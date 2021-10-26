@@ -1,16 +1,29 @@
 import cv2
-import torch
+# import torch
+import pycocotools
 import numpy as np
 from torch.utils.data import Dataset
+from mmdet.core import BitmapMasks
 
 from params import CELL_TYPES
+
+
+RESULTS_PH = {
+    "scale_factor": np.ones(1),
+    "img_norm_cfg": None,
+    "flip_direction": None,
+    "flip": None,
+    'img_fields': ["img"],
+    'bbox_fields': ["gt_bboxes"],
+    'mask_fields': ["gt_masks"]
+}
 
 
 class SartoriusDataset(Dataset):
     """
     Segmentation dataset for training / validation.
     """
-    def __init__(self, df, transforms=None, train=True):
+    def __init__(self, df, transforms):
         """
         Constructor.
 
@@ -21,33 +34,45 @@ class SartoriusDataset(Dataset):
         """
 
         self.df = df
-        self.train = train
         self.transforms = transforms
 
         self.img_paths = df["img_path"].values
-        self.mask_paths = df["mask_path"].values
-
-        self.masks = [np.load(path).transpose(1, 2, 0).astype(np.int16) for path in self.mask_paths]
         self.cell_types = df["cell_type"].values
 
         self.y_cls = [CELL_TYPES.index(c) for c in self.cell_types]
+
+        self.boxes = [np.array(df['ann'][i]['bboxes']).astype(np.float32) for i in range(len(df))]
+        self.class_labels = [np.array(df['ann'][i]['labels']) for i in range(len(df))]
+        self.masks = [np.array(df['ann'][i]['masks']) for i in range(len(df))]
+
+        self.anns = df['ann'].values
 
     def __len__(self):
         return self.df.shape[0]
 
     def __getitem__(self, idx):
         image = cv2.imread(self.img_paths[idx])
-        # masks = np.load(self.mask_paths[idx]).transpose(1, 2, 0).astype(np.int16)
-        masks = self.masks[idx]
 
-        if self.transforms:
-            transformed = self.transforms(image=image, mask=masks)
-            image = transformed["image"]
-            masks = transformed["mask"]
-            masks = masks.transpose(1, 2).transpose(0, 1).float()
+        masks = self._load_masks(self.masks[idx], image.shape[:2])
 
-        masks[-1] = masks[-1] / 10000.
+        results = {
+            "img": image,
+            "gt_bboxes": self.boxes[idx],
+            "gt_labels": self.class_labels[idx],
+            "gt_masks": masks,
+            "img_shape": image.shape[:2],
+            "ori_shape": image.shape[:2],
+            "filename": self.img_paths[idx],
+            'ori_filename': self.img_paths[idx],
+        }
+        results.update(RESULTS_PH)
 
-        y = torch.tensor(self.y_cls[idx])
+        results_transfo = None
+        while results_transfo is None:
+            results_transfo = self.transforms(results.copy())
 
-        return image, masks, y
+        return results_transfo
+
+    def _load_masks(self, mask, shape):
+        h, w = shape
+        return BitmapMasks([pycocotools.mask.decode(m) for m in mask], h, w)

@@ -1,19 +1,16 @@
+import gc
 import time
 import torch
 from transformers import get_linear_schedule_with_warmup
 
-from training.meter import SegmentationMeter
-from training.loader import define_loaders
-from training.optim import SartoriusLoss, define_optimizer
-from inference.predict import compute_activations
+from data.loader import define_loaders
+from training.optim import define_optimizer
 
 
 def fit(
     model,
     train_dataset,
     val_dataset,
-    loss_config,
-    activations={},
     optimizer_name="Adam",
     epochs=50,
     batch_size=32,
@@ -22,7 +19,7 @@ def fit(
     lr=1e-3,
     verbose=1,
     first_epoch_eval=0,
-    num_classes=1,
+    use_fp16=False,
     device="cuda",
 ):
     """
@@ -56,13 +53,9 @@ def fit(
 
     optimizer = define_optimizer(optimizer_name, model.parameters(), lr=lr)
 
-    loss_fct = SartoriusLoss(loss_config)
-
     train_loader, val_loader = define_loaders(
         train_dataset, val_dataset, batch_size=batch_size, val_bs=val_bs
     )
-
-    meter = SegmentationMeter()
 
     num_warmup_steps = int(warmup_prop * epochs * len(train_loader))
     num_training_steps = int(epochs * len(train_loader))
@@ -78,48 +71,45 @@ def fit(
         avg_loss = 0
 
         for batch in train_loader:
-            x = batch[0].to(device).float()
-            y_mask = batch[1].to(device)
-            y_cls = batch[2].to(device)
+            if use_fp16:  # TODO
+                with torch.cuda.amp.autocast():
+                    losses = model(**batch, return_loss=True)
+                    loss, _ = model.module._parse_losses(losses)
 
-            with torch.cuda.amp.autocast():
-                pred_mask, pred_cls = model(x)
+                    scaler.scale(loss).backward()
+                    avg_loss += loss.item() / len(train_loader)
 
-                loss = loss_fct(pred_mask, pred_cls, y_mask, y_cls).mean()
+                    scaler.step(optimizer)
 
-                scaler.scale(loss).backward()
+                    scale = scaler.get_scale()
+                    scaler.update()
 
+                    if scale == scaler.get_scale():
+                        scheduler.step()
+
+            else:
+                losses = model(**batch, return_loss=True)
+                loss, _ = model.module._parse_losses(losses)
+
+                loss.backward()
                 avg_loss += loss.item() / len(train_loader)
 
-                scaler.step(optimizer)
-                scaler.update()
+                optimizer.step()
+                scheduler.step()
 
-            scheduler.step()
             for param in model.parameters():
                 param.grad = None
 
         model.eval()
         avg_val_loss = 0.
-        metrics = meter.reset()
 
         if epoch + 1 >= first_epoch_eval:
             with torch.no_grad():
                 for batch in val_loader:
-                    x = batch[0].to(device).float()
-                    y_mask = batch[1].to(device)
-                    y_cls = batch[2].to(device)
+                    losses = model(**batch, return_loss=True)
+                    loss, _ = model.module._parse_losses(losses)
 
-                    pred_mask, pred_cls = model(x)
-
-                    loss = loss_fct(pred_mask.detach(), pred_cls.detach(), y_mask, y_cls).mean()
-
-                    avg_val_loss += loss / len(val_loader)
-
-                    pred_mask, pred_cls = compute_activations(pred_mask, pred_cls, activations)
-
-                    meter.update(pred_mask[:, 0], pred_cls, y_mask[:, 0] > 0, y_cls)
-
-            metrics = meter.compute()
+                    avg_val_loss += loss.item() / len(val_loader)
 
         elapsed_time = time.time() - start_time
         if (epoch + 1) % verbose == 0:
@@ -132,13 +122,11 @@ def fit(
             )
             if epoch + 1 >= first_epoch_eval:
                 print(
-                    f"val_loss={avg_val_loss:.3f} \t dice={metrics['dice']:.3f} \t"
-                    f"acc={metrics['acc']:.3f}"
+                    f"val_loss={avg_val_loss:.3f}"
                 )
             else:
                 print("")
 
-    del (train_loader, val_loader, y_mask, loss, x, y_cls, pred_cls, pred_mask)
-    torch.cuda.empty_cache()
-
-    return meter
+        del (loss, losses, batch)
+        gc.collect()
+        torch.cuda.empty_cache()
