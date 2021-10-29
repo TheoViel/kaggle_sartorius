@@ -4,10 +4,11 @@ import torch.nn as nn
 from training.losses import SmoothCrossEntropyLoss, FocalTverskyLoss, lovasz_loss, DiceLoss
 
 
-def define_optimizer(name, params, lr=1e-3):
+def define_optimizer(name, params, lr=1e-3, weight_decay=0):
     """
     Defines the loss function associated to the name.
     Supports optimizers from torch.nn.
+    TODO
 
     Args:
         name (str): Optimizer name.
@@ -21,7 +22,7 @@ def define_optimizer(name, params, lr=1e-3):
         torch optimizer: Optimizer
     """
     try:
-        optimizer = getattr(torch.optim, name)(params, lr=lr)
+        optimizer = getattr(torch.optim, name)(params, lr=lr, weight_decay=weight_decay)
     except AttributeError:
         raise NotImplementedError
 

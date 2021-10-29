@@ -1,4 +1,8 @@
-from params import NUM_CLASSES
+# https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/models/mask_rcnn_r50_fpn.py
+
+num_classes = 1
+mask_iou_threshold = 0.5
+bbox_iou_threshold = 0.7
 
 model = dict(
     type="MaskRCNN",
@@ -24,7 +28,7 @@ model = dict(
             type="AnchorGenerator",
             scales=[8],
             ratios=[0.5, 1.0, 2.0],
-            strides=[4, 8, 16, 32, 64],
+            strides=[2, 4, 8, 16, 32],
         ),
         bbox_coder=dict(
             type="DeltaXYWHBBoxCoder",
@@ -40,14 +44,14 @@ model = dict(
             type="SingleRoIExtractor",
             roi_layer=dict(type="RoIAlign", output_size=7, sampling_ratio=0),
             out_channels=256,
-            featmap_strides=[4, 8, 16, 32],
+            featmap_strides=[2, 4, 8, 16],
         ),
         bbox_head=dict(
             type="Shared2FCBBoxHead",
             in_channels=256,
             fc_out_channels=1024,
             roi_feat_size=7,
-            num_classes=NUM_CLASSES,
+            num_classes=num_classes,
             bbox_coder=dict(
                 type="DeltaXYWHBBoxCoder",
                 target_means=[0.0, 0.0, 0.0, 0.0],
@@ -61,14 +65,14 @@ model = dict(
             type="SingleRoIExtractor",
             roi_layer=dict(type="RoIAlign", output_size=14, sampling_ratio=0),
             out_channels=256,
-            featmap_strides=[4, 8, 16, 32],
+            featmap_strides=[2, 4, 8, 16],
         ),
         mask_head=dict(
             type="FCNMaskHead",
             num_convs=4,
             in_channels=256,
             conv_out_channels=256,
-            num_classes=NUM_CLASSES,
+            num_classes=num_classes,
             loss_mask=dict(type="CrossEntropyLoss", use_mask=True, loss_weight=1.0),
         ),
     ),
@@ -97,7 +101,7 @@ model = dict(
         rpn_proposal=dict(
             nms_pre=2000,
             max_per_img=1000,
-            nms=dict(type="nms", iou_threshold=0.7),
+            nms=dict(type="nms", iou_threshold=bbox_iou_threshold),
             min_bbox_size=0,
         ),
         rcnn=dict(
@@ -123,15 +127,15 @@ model = dict(
     ),
     test_cfg=dict(
         rpn=dict(
-            nms_pre=1000,
+            nms_pre=2000,
             max_per_img=1000,
-            nms=dict(type="nms", iou_threshold=0.7),
+            nms=dict(type="nms", iou_threshold=bbox_iou_threshold),
             min_bbox_size=0,
         ),
         rcnn=dict(
-            score_thr=0.05,
-            nms=dict(type="nms", iou_threshold=0.5),
-            max_per_img=100,
+            score_thr=0.001,
+            nms=dict(type="nms", iou_threshold=mask_iou_threshold),
+            max_per_img=1000,
             mask_thr_binary=0.5,
         ),
     ),

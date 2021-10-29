@@ -1,5 +1,3 @@
-import gc
-import torch
 from sklearn.model_selection import StratifiedKFold
 
 
@@ -10,13 +8,8 @@ from data.preparation import prepare_data
 from data.transforms import define_pipelines
 from data.dataset import SartoriusDataset
 
-from inference.predict import predict
-from inference.post_process import preds_to_instance, remove_padding
-
 from utils.torch import seed_everything, count_parameters, save_model_weights
-from utils.metrics import iou_map
-
-from params import CELL_TYPES, ORIG_SIZE
+from utils.metrics import evaluate_results
 
 
 def train(config, df_train, df_val, pipelines, fold, log_folder=None):
@@ -37,7 +30,11 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
     """
     seed_everything(config.seed)
 
-    model = define_model(config.model_config).to(config.device)
+    model = define_model(
+        config.model_config,
+        reduce_stride=config.reduce_stride,
+        pretrained=config.pretrained,
+    ).to(config.device)
     model.zero_grad()
 
     n_parameters = count_parameters(model)
@@ -50,15 +47,20 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
         df_val,
         transforms=pipelines['val'],
     )
+    predict_dataset = SartoriusDataset(
+        df_val,
+        transforms=pipelines['test'],
+    )
 
     print(f"    -> {len(train_dataset)} training images")
     print(f"    -> {len(val_dataset)} validation images")
     print(f"    -> {n_parameters} trainable parameters\n")
 
-    fit(
+    results = fit(
         model,
         train_dataset,
         val_dataset,
+        predict_dataset,
         optimizer_name=config.optimizer,
         epochs=config.epochs,
         batch_size=config.batch_size,
@@ -66,59 +68,18 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
         lr=config.lr,
         warmup_prop=config.warmup_prop,
         verbose=config.verbose,
+        verbose_eval=config.verbose_eval,
         first_epoch_eval=config.first_epoch_eval,
+        compute_val_loss=config.compute_val_loss,
         use_fp16=config.use_fp16,
         device=config.device,
     )
 
     if config.save_weights and log_folder is not None:
-        name = f"{config.decoder}_{config.encoder}_{fold}.pt"
-        save_model_weights(
-            model,
-            name,
-            cp_folder=log_folder,
-        )
-
-    return model
-
-
-def validate(df, model, config, pipelines):
-    """
-    Validation on full images.
-    TODO
-
-    Args:
-        model (torch model): Trained model.
-        config (Config): Model config.
-    """
-    dataset = SartoriusDataset(
-        df,
-        transforms=pipelines['test'],
-    )
-
-    results = predict(
-        dataset,
-        model,
-        activations=config.activations,
-        batch_size=config.val_bs,
-        use_tta=config.use_tta,
-        device=config.device
-    )
+        name = f"{config.name}_{fold}.pt"
+        save_model_weights(model, name, cp_folder=log_folder)
 
     return results
-
-    # preds = remove_padding(preds, ORIG_SIZE)
-
-    # pred_cell_types = [CELL_TYPES[i] for i in preds_cls.argmax(-1)]
-
-    # preds_instance = preds_to_instance(preds, pred_cell_types)
-
-    # truths = [m[..., 0] for m in dataset.masks]
-    # score = iou_map(truths, preds_instance)
-
-    # print(f' -> Validation IoU mAP = {score:.3f}')
-
-    # return preds, preds_instance, truths
 
 
 def k_fold(config, log_folder=None):
@@ -147,21 +108,14 @@ def k_fold(config, log_folder=None):
 
             pipelines = define_pipelines(config.data_config)
 
-            model = train(config, df_train, df_val, pipelines, i, log_folder=log_folder)
-
-            results = validate(df_val, model, config, pipelines)
-
-            return results
+            results = train(config, df_train, df_val, pipelines, i, log_folder=log_folder)
             all_results += results
 
             if log_folder is None or len(config.selected_folds) == 1:
-                break
+                return results
 
-            del (model, results)
-            torch.cuda.empty_cache()
-            gc.collect()
-
-    # cv_score = iou_map(all_truths, all_preds_instance, verbose=0)
-    # print(f'\n -> CV IoU mAP : {cv_score:.3f}')
+    dataset = SartoriusDataset(df, transforms=pipelines['test'])
+    cv_score = evaluate_results(dataset, results)
+    print(f'\n -> CV IoU mAP : {cv_score:.3f}')
 
     return all_results

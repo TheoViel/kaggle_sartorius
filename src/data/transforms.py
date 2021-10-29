@@ -5,7 +5,7 @@ from mmdet.datasets.pipelines import Compose
 
 
 def define_pipelines(config_file):
-    pipe_cfg = Config.fromfile("data/config.py").data
+    pipe_cfg = Config.fromfile(config_file).data
     pipelines = {
         k: Compose(
             [build_from_cfg(aug, PIPELINES, None) for aug in pipe_cfg[k].pipeline]

@@ -1,24 +1,31 @@
 import gc
 import time
 import torch
+import traceback
 from transformers import get_linear_schedule_with_warmup
 
 from data.loader import define_loaders
 from training.optim import define_optimizer
+from inference.predict import predict
+from utils.metrics import evaluate_results_multiproc, evaluate_results  # noqa
 
 
 def fit(
     model,
     train_dataset,
     val_dataset,
+    predict_dataset,
     optimizer_name="Adam",
     epochs=50,
     batch_size=32,
     val_bs=32,
     warmup_prop=0.1,
     lr=1e-3,
+    weight_decay=0,
     verbose=1,
+    verbose_eval=5,
     first_epoch_eval=0,
+    compute_val_loss=True,
     use_fp16=False,
     device="cuda",
 ):
@@ -47,11 +54,13 @@ def fit(
         numpy array [len(val_dataset) x num_classes]: Last prediction on the validation data.
         pandas dataframe: Training history.
     """
-    avg_val_loss = 0.0
+    dt = 0.
 
     scaler = torch.cuda.amp.GradScaler()
 
-    optimizer = define_optimizer(optimizer_name, model.parameters(), lr=lr)
+    optimizer = define_optimizer(
+        optimizer_name, model.parameters(), lr=lr, weight_decay=weight_decay
+    )
 
     train_loader, val_loader = define_loaders(
         train_dataset, val_dataset, batch_size=batch_size, val_bs=val_bs
@@ -63,11 +72,10 @@ def fit(
         optimizer, num_warmup_steps, num_training_steps
     )
 
-    for epoch in range(epochs):
+    for epoch in range(1, epochs+1):
         model.train()
         start_time = time.time()
         optimizer.zero_grad()
-
         avg_loss = 0
 
         for batch in train_loader:
@@ -79,6 +87,7 @@ def fit(
                     scaler.scale(loss).backward()
                     avg_loss += loss.item() / len(train_loader)
 
+                    # TODO : grad clip
                     scaler.step(optimizer)
 
                     scale = scaler.get_scale()
@@ -88,11 +97,15 @@ def fit(
                         scheduler.step()
 
             else:
+                # print(batch['img'].data[0].size())
+
                 losses = model(**batch, return_loss=True)
                 loss, _ = model.module._parse_losses(losses)
 
                 loss.backward()
                 avg_loss += loss.item() / len(train_loader)
+
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
 
                 optimizer.step()
                 scheduler.step()
@@ -101,32 +114,43 @@ def fit(
                 param.grad = None
 
         model.eval()
-        avg_val_loss = 0.
+        avg_val_loss, iou_map = 0, 0
 
-        if epoch + 1 >= first_epoch_eval:
-            with torch.no_grad():
-                for batch in val_loader:
-                    losses = model(**batch, return_loss=True)
-                    loss, _ = model.module._parse_losses(losses)
+        do_eval = (epoch >= first_epoch_eval and not epoch % verbose_eval) or (epoch == epochs)
+        if do_eval:
+            if compute_val_loss:
+                with torch.no_grad():
+                    for batch in val_loader:
+                        losses = model(**batch, return_loss=True)
+                        loss, _ = model.module._parse_losses(losses)
 
-                    avg_val_loss += loss.item() / len(val_loader)
+                        avg_val_loss += loss.item() / len(val_loader)
 
-        elapsed_time = time.time() - start_time
-        if (epoch + 1) % verbose == 0:
-            elapsed_time = elapsed_time * verbose
-            lr = scheduler.get_last_lr()[0]
-            print(
-                f"Epoch {epoch + 1:02d}/{epochs:02d} \t lr={lr:.1e}\t t={elapsed_time:.0f}s\t"
-                f"loss={avg_loss:.3f}",
-                end="\t",
+            results = predict(
+                predict_dataset, model, batch_size=1, use_tta=False, device=device
             )
-            if epoch + 1 >= first_epoch_eval:
-                print(
-                    f"val_loss={avg_val_loss:.3f}"
-                )
-            else:
-                print("")
+            try:
+                iou_map = evaluate_results(predict_dataset, results)
+                # iou_map = evaluate_results_multiproc(predict_dataset, results)
+            except Exception:
+                traceback.print_exc()
+                print()
+                pass
+
+        # Print infos
+        dt += time.time() - start_time
+        lr = scheduler.get_last_lr()[0]
+
+        string = f"Epoch {epoch:02d}/{epochs:02d} \t lr={lr:.1e}\t t={dt:.0f}s\tloss={avg_loss:.3f}"
+        string = string + f"\t avg_val_loss={avg_val_loss:.3f}" if avg_val_loss else string
+        string = string + f"\t iou_map={iou_map:.3f}" if iou_map else string
+
+        if verbose:
+            print(string)
+            dt = 0
 
         del (loss, losses, batch)
         gc.collect()
         torch.cuda.empty_cache()
+
+    return results

@@ -5,11 +5,12 @@ import numpy as np
 from torch.utils.data import Dataset
 from mmdet.core import BitmapMasks
 
-from params import CELL_TYPES
+from params import CELL_TYPES, ORIG_SIZE
 
 
 RESULTS_PH = {
-    "scale_factor": np.ones(1),
+    'scale_factor': 1.,  # np.ones(4),
+    "pad_shape": (0, 0),
     "img_norm_cfg": None,
     "flip_direction": None,
     "flip": None,
@@ -23,7 +24,7 @@ class SartoriusDataset(Dataset):
     """
     Segmentation dataset for training / validation.
     """
-    def __init__(self, df, transforms):
+    def __init__(self, df, transforms, precompute_masks=True):
         """
         Constructor.
 
@@ -43,7 +44,13 @@ class SartoriusDataset(Dataset):
 
         self.boxes = [np.array(df['ann'][i]['bboxes']).astype(np.float32) for i in range(len(df))]
         self.class_labels = [np.array(df['ann'][i]['labels']) for i in range(len(df))]
-        self.masks = [np.array(df['ann'][i]['masks']) for i in range(len(df))]
+
+        self.encodings = [np.array(df['ann'][i]['masks']) for i in range(len(df))]
+
+        if precompute_masks:
+            self.masks = [self._load_masks(enc, ORIG_SIZE) for enc in self.encodings]
+        else:
+            self.masks = None
 
         self.anns = df['ann'].values
 
@@ -53,12 +60,15 @@ class SartoriusDataset(Dataset):
     def __getitem__(self, idx):
         image = cv2.imread(self.img_paths[idx])
 
-        masks = self._load_masks(self.masks[idx], image.shape[:2])
+        if self.masks is not None:
+            masks = self.masks[idx]
+        else:
+            masks = self._load_masks(self.encodings[idx], image.shape[:2])
 
         results = {
             "img": image,
             "gt_bboxes": self.boxes[idx],
-            "gt_labels": self.class_labels[idx],
+            "gt_labels": self.class_labels[idx] * 0,
             "gt_masks": masks,
             "img_shape": image.shape[:2],
             "ori_shape": image.shape[:2],
@@ -70,6 +80,9 @@ class SartoriusDataset(Dataset):
         results_transfo = None
         while results_transfo is None:
             results_transfo = self.transforms(results.copy())
+
+        # if 'scale_factor' not in results_transfo.keys():
+        #     results_transfo['scale_factor'] = np.ones(4)
 
         return results_transfo
 

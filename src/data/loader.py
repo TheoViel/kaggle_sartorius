@@ -6,7 +6,9 @@ from utils.torch import worker_init_fn
 from params import NUM_WORKERS
 
 
-def define_loaders(train_dataset=None, val_dataset=None,  batch_size=32, val_bs=32):
+def define_loaders(
+    train_dataset=None, val_dataset=None,  batch_size=32, val_bs=32, num_workers=NUM_WORKERS
+):
     """
     Builds data loaders. TODO
 
@@ -29,7 +31,7 @@ def define_loaders(train_dataset=None, val_dataset=None,  batch_size=32, val_bs=
             batch_size=batch_size,
             shuffle=True,
             drop_last=True,
-            num_workers=NUM_WORKERS,
+            num_workers=num_workers,
             collate_fn=partial(collate, samples_per_gpu=batch_size),
             pin_memory=False,
             worker_init_fn=worker_init_fn
@@ -41,7 +43,7 @@ def define_loaders(train_dataset=None, val_dataset=None,  batch_size=32, val_bs=
             batch_size=val_bs,
             shuffle=False,
             collate_fn=partial(collate, samples_per_gpu=batch_size),
-            num_workers=NUM_WORKERS,
+            num_workers=num_workers,
             pin_memory=True,
         )
 

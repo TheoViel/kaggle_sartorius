@@ -1,112 +1,7 @@
 import skimage
 import numpy as np
-
-
-def dice_scores_img(pred, truth, eps=1e-8):
-    """
-    Dice metric for a single image as array.
-
-    Args:
-        pred (np array): Predictions.
-        truth (np array): Ground truths.
-        eps (float, optional): epsilon to avoid dividing by 0. Defaults to 1e-8.
-
-    Returns:
-        np array : dice value for each class.
-    """
-    pred = pred.reshape(-1) > 0
-    truth = truth.reshape(-1) > 0
-    intersect = (pred & truth).sum(-1)
-    union = pred.sum(-1) + truth.sum(-1)
-
-    dice = (2.0 * intersect + eps) / (union + eps)
-    return dice
-
-
-def dice_scores_img_tensor(pred, truth, eps=1e-8):
-    """
-    Dice metric for a single image as tensor.
-
-    Args:
-        pred (torch tensor): Predictions.
-        truth (torch tensor): Ground truths.
-        eps (float, optional): epsilon to avoid dividing by 0. Defaults to 1e-8.
-
-    Returns:
-        np array : dice value for each class.
-    """
-    pred = pred.view(-1) > 0
-    truth = truth.contiguous().view(-1) > 0
-    intersect = (pred & truth).sum(-1)
-    union = pred.sum(-1) + truth.sum(-1)
-
-    dice = (2.0 * intersect + eps) / (union + eps)
-    return float(dice)
-
-
-def dice_score(pred, truth, eps=1e-8, threshold=0.5):
-    """
-    Dice metric. Only classes that are present are weighted.
-
-    Args:
-        pred (np array): Predictions.
-        truth (np array): Ground truths.
-        eps (float, optional): epsilon to avoid dividing by 0. Defaults to 1e-8.
-        threshold (float, optional): Threshold for predictions. Defaults to 0.5.
-
-    Returns:
-        float: dice value.
-    """
-    pred = (pred.reshape((truth.shape[0], -1)) > threshold).astype(int)
-    truth = truth.reshape((truth.shape[0], -1)).astype(int)
-    intersect = (pred + truth == 2).sum(-1)
-    union = pred.sum(-1) + truth.sum(-1)
-    dice = (2.0 * intersect + eps) / (union + eps)
-    return dice.mean()
-
-
-def dice_score_tensor(pred, truth, eps=1e-8, threshold=0.5):
-    """
-    Dice metric for tensors. Only classes that are present are weighted.
-
-    Args:
-        pred (torch tensor): Predictions.
-        truth (torch tensor): Ground truths.
-        eps (float, optional): epsilon to avoid dividing by 0. Defaults to 1e-8.
-        threshold (float, optional): Threshold for predictions. Defaults to 0.5.
-
-    Returns:
-        float: dice value.
-    """
-    pred = (pred.view((truth.size(0), -1)) > threshold).int()
-    truth = truth.view((truth.size(0), -1)).int()
-    intersect = (pred + truth == 2).sum(-1)
-    union = pred.sum(-1) + truth.sum(-1)
-    dice = (2.0 * intersect + eps) / (union + eps)
-    return dice.mean()
-
-
-def tweak_threshold(mask, pred):
-    """
-    Tweaks the threshold to maximise the score.
-
-    Args:
-        mask (torch tensor): Ground truths.
-        pred (torch tensor): Predictions.
-
-    Returns:
-        float: Best threshold.
-        float: Best score.
-    """
-    thresholds = []
-    scores = []
-    for threshold in np.linspace(0.2, 0.7, 11):
-
-        dice_score = dice_scores_img_tensor(pred=pred > threshold, truth=mask)
-        thresholds.append(threshold)
-        scores.append(dice_score)
-
-    return thresholds[np.argmax(scores)], np.max(scores)
+from tqdm.notebook import tqdm  # noqa
+from multiprocessing import Pool
 
 
 def compute_iou(labels, y_pred):
@@ -173,7 +68,7 @@ def precision_at(threshold, iou):
     return tp, fp, fn
 
 
-def iou_map(truths, preds, verbose=0):
+def iou_map(truths, preds, verbose=0, ious=None):
     """
     Computes the metric for the competition.
     Masks contain the segmented pixels where each object has one value associated,
@@ -187,7 +82,8 @@ def iou_map(truths, preds, verbose=0):
     Returns:
         float: mAP.
     """
-    ious = [compute_iou(truth, pred) for truth, pred in zip(truths, preds)]
+    if ious is None:
+        ious = [compute_iou(truth, pred) for truth, pred in zip(truths, preds)]
 
     if verbose:
         print("Thresh\tTP\tFP\tFN\tPrec.")
@@ -201,7 +97,7 @@ def iou_map(truths, preds, verbose=0):
             fps += fp
             fns += fn
 
-        p = tps / (tps + fps + fns)
+        p = tps / (tps + fps + fns) if tps else 0
         prec.append(p)
 
         if verbose:
@@ -211,3 +107,86 @@ def iou_map(truths, preds, verbose=0):
         print("AP\t-\t-\t-\t{:1.3f}".format(np.mean(prec)))
 
     return np.mean(prec)
+
+
+def evaluate_results(dataset, results, threshold=0.5, num_classes=1, verbose=0):
+    ious = []
+    for idx in range(len(dataset)):
+
+        # retrieve masks
+        if num_classes == 1:
+            # remove low confidence
+            scores = np.concatenate(results[idx][0])[:, -1]
+            last = np.argmax(scores < threshold) if len(scores) else 0
+            if not last:
+                continue
+
+            masks_pred = np.array(results[idx][1][0][:last]).astype(int)
+        else:
+            raise NotImplementedError()
+            masks_pred = np.concatenate(results[idx][1]).astype(int)
+
+        masks_truth = dataset.masks[idx].masks
+
+        # # convert to format for metric
+        mask_truth = np.zeros(masks_truth.shape[1:], dtype=int)
+        for i in range(len(masks_truth)):
+            mask_truth = np.where(
+                np.logical_and(masks_truth[i], mask_truth == 0), i + 1, mask_truth
+            )
+
+        mask_pred = np.zeros(masks_pred.shape[1:], dtype=int)
+        for i in range(len(masks_pred)):
+            mask_pred = np.where(
+                np.logical_and(masks_pred[i], mask_pred == 0), i + 1, mask_pred
+            )
+
+        ious.append(compute_iou(mask_truth, mask_pred))
+
+    return iou_map(None, None, verbose=verbose, ious=ious)
+
+
+def compute_ious(idx, dataset, results, threshold):
+    scores = np.concatenate(results[idx][0])[:, -1]
+    last = np.argmax(scores < threshold) if len(scores) else 0
+    if not last:
+        return
+
+    masks_pred = np.array(results[idx][1][0][:last]).astype(int)
+    masks_truth = dataset.masks[idx].masks
+
+    # convert to format for metric
+    mask_truth = np.zeros(masks_truth.shape[1:], dtype=int)
+    for i in range(len(masks_truth)):
+        mask_truth = np.where(
+            np.logical_and(masks_truth[i], mask_truth == 0), i + 1, mask_truth
+        )
+
+    mask_pred = np.zeros(masks_pred.shape[1:], dtype=int)
+    for i in range(len(masks_pred)):
+        mask_pred = np.where(
+            np.logical_and(masks_pred[i], mask_pred == 0), i + 1, mask_pred
+        )
+
+    return compute_iou(mask_truth, mask_pred)
+
+
+def compute_ious_(idx):
+    return compute_ious(idx=idx, dataset=DATASET, results=RESULTS, threshold=THRESHOLD)
+
+
+def evaluate_results_multiproc(dataset, results, threshold=0.5, verbose=0):
+    global DATASET
+    DATASET = dataset
+    global RESULTS
+    RESULTS = results
+    global THRESHOLD
+    THRESHOLD = threshold
+
+    ious = []
+    with Pool(processes=4) as p:
+        for iou in p.map(compute_ious_, range(len(dataset))):
+            if iou is not None:
+                ious.append(iou)
+
+    return iou_map(None, None, verbose=verbose, ious=ious)

@@ -3,7 +3,7 @@
 import torch
 import numpy as np
 
-NUM_WORKERS = 4
+NUM_WORKERS = 0  # issues with evaluate_results_multiproc
 
 DATA_PATH = "../input/"
 TRAIN_IMG_PATH = DATA_PATH + "train/"

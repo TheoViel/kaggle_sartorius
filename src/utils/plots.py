@@ -1,4 +1,5 @@
 import cv2
+import skimage
 import numpy as np
 import plotly.express as px
 import matplotlib.pyplot as plt
@@ -9,6 +10,11 @@ from mmdet.core import BitmapMasks
 from matplotlib.patches import Rectangle
 
 from utils.metrics import compute_iou
+
+
+GREEN = (56 / 255, 200 / 255, 100 / 255)
+BLUE = (32 / 255, 50 / 255, 155 / 255)
+RED = (238 / 255, 97 / 255, 55 / 255)
 
 
 def plot_sample(img, mask=None, boxes=[], width=1, plotly=False):
@@ -35,11 +41,14 @@ def plot_sample(img, mask=None, boxes=[], width=1, plotly=False):
     colors = []
 
     if isinstance(mask, BitmapMasks):
-        mask = mask.masks
+        mask = mask.masks.astype(int)
         for i in range(len(mask)):
             mask[i] *= (i + 1)
 
     if len(mask.shape) == 3:
+        if mask.max() == 1:
+            for i in range(len(mask)):
+                mask[i] *= (i + 1)
         mask = mask.max(0)
 
     if mask is not None:
@@ -74,7 +83,7 @@ def get_centers(mask):
     return np.array(centers)
 
 
-def plot_preds_iou(img, preds, truths, width=1):
+def plot_preds_iou(img, preds, truths, width=1, plot_tp=True):
     """
     Plots the contours of a given mask.
     TODO
@@ -87,23 +96,27 @@ def plot_preds_iou(img, preds, truths, width=1):
 
     img_ = img.copy()
 
+    preds, _, _ = skimage.segmentation.relabel_sequential(preds)
+    truths, _, _ = skimage.segmentation.relabel_sequential(truths)
     ious = compute_iou(truths, preds)
+
     centers_pred = get_centers(preds)
 
     # Plot preds
     for i in range(1, int(np.max(preds)) + 1):
         m = ((preds == i) * 255).astype(np.uint8)
-        color = tuple(np.random.random(size=3))
-        color = (0, 0, 1, 0.5)
+
+        if not plot_tp and ious.max(0)[i - 1] > 0.5:
+            continue
 
         contours, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-        cv2.polylines(img_, contours, True, color, width)
+        cv2.polylines(img_, contours, True, BLUE, width)
 
     # Plot truths
     for i in range(1, int(np.max(truths)) + 1):
         m = ((truths == i) * 255).astype(np.uint8)
         color = tuple(np.random.random(size=3))
-        color = (0, 1, 0, 0.5) if ious.max(1)[i - 1] > 0.5 else (1, 0, 0, 0.5)
+        color = GREEN if ious.max(1)[i - 1] > 0.5 else RED
 
         contours, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
         cv2.polylines(img_, contours, True, color, width)
