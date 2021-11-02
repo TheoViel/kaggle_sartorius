@@ -16,50 +16,40 @@ bbox_params = dict(
 )
 keymap = {"img": "image", "gt_masks": "masks", "gt_bboxes": "bboxes"}
 
+crop_rotate_crop = dict(
+    type="Compose",
+    transforms=[
+        dict(type="RandomCrop", height=SIZE * 2, width=SIZE * 2, p=1),
+        dict(type="Rotate", limit=45, p=1),
+        dict(type="CenterCrop", height=SIZE, width=SIZE, p=1),
+    ]
+)
+
+crop_resize_crop = dict(
+    type="Compose",
+    transforms=[
+        dict(type="RandomCrop", height=SIZE * 2, width=SIZE * 2, p=1),
+        dict(type="RandomScale", scale_limit=(0.75, 1.5), p=1),
+        dict(type="RandomCrop", height=SIZE, width=SIZE, p=1),
+    ]
+)
+
 albu_transforms = [
     dict(type="HorizontalFlip", p=0.5),
     dict(type="VerticalFlip", p=0.5),
-    # dict(  # -> TODO
-    #     type="Rotate",
-    #     limit=45,
-    #     p=1,
-    # ),
     dict(
         type="OneOf",
         transforms=[
-            dict(type="RandomGamma", gamma_limit=(90, 110), p=1.0),
-            dict(type="RandomBrightnessContrast", brightness_limit=0.1, contrast_limit=0.1, p=1.0),
+            # crop_rotate_crop,
+            dict(type="RandomCrop", height=SIZE, width=SIZE, p=1),
+            crop_resize_crop,
         ],
-        p=0.5,
-    ),
-    dict(
-        type="OneOf",
-        transforms=[
-            dict(type="Blur", blur_limit=(2, 4), p=1.0),
-            dict(type="MotionBlur", blur_limit=(3, 3), p=1.0),
-            dict(type="MedianBlur", blur_limit=(1, 3), p=1.0),
-            dict(type="GaussianBlur", blur_limit=(3, 5), p=1.0),
-        ],
-        p=0.5,
-    ),
-    dict(
-        type="OneOf",
-        transforms=[
-            dict(type="GaussNoise", var_limit=(1.0, 25.0), p=1.0),
-        ],
-        p=0.5,
-    ),
+        p=1
+    )
 ]
 
 
 train_pipeline = [
-    # dict(type="RandomCrop", crop_size=(SIZE * 2, SIZE * 2)),
-    # dict(
-    #     type="Resize",
-    #     img_scale=[(SIZE, SIZE), (SIZE * 3 // 2, SIZE * 3 // 2)],
-    #     multiscale_mode="range"
-    # ),
-    dict(type="RandomCrop", crop_size=(SIZE, SIZE)),
     dict(
         type="Albu",
         transforms=albu_transforms,
@@ -79,13 +69,6 @@ train_pipeline = [
 ]
 
 train_viz_pipeline = [
-    # dict(type="RandomCrop", crop_size=(SIZE * 2, SIZE * 2)),
-    # dict(
-    #     type="Resize",
-    #     img_scale=[(SIZE, SIZE), (SIZE * 3 // 2, SIZE * 3 // 2)],
-    #     multiscale_mode="range"
-    # ),
-    dict(type="RandomCrop", crop_size=(SIZE, SIZE)),
     dict(
         type="Albu",
         transforms=albu_transforms,

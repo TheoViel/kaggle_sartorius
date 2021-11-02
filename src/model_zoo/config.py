@@ -27,8 +27,8 @@ model = dict(
         anchor_generator=dict(
             type="AnchorGenerator",
             scales=[8],
-            ratios=[0.5, 1.0, 2.0],
-            strides=[2, 4, 8, 16, 32],
+            ratios=[0.25, 0.5, 1.0, 2.0, 4.0],   # extended
+            strides=[4, 8, 16, 32, 64],
         ),
         bbox_coder=dict(
             type="DeltaXYWHBBoxCoder",
@@ -44,7 +44,7 @@ model = dict(
             type="SingleRoIExtractor",
             roi_layer=dict(type="RoIAlign", output_size=7, sampling_ratio=0),
             out_channels=256,
-            featmap_strides=[2, 4, 8, 16],
+            featmap_strides=[4, 8, 16, 32],
         ),
         bbox_head=dict(
             type="Shared2FCBBoxHead",
@@ -65,7 +65,7 @@ model = dict(
             type="SingleRoIExtractor",
             roi_layer=dict(type="RoIAlign", output_size=14, sampling_ratio=0),
             out_channels=256,
-            featmap_strides=[2, 4, 8, 16],
+            featmap_strides=[4, 8, 16, 32],
         ),
         mask_head=dict(
             type="FCNMaskHead",
@@ -116,7 +116,7 @@ model = dict(
             sampler=dict(
                 type="RandomSampler",
                 num=512,
-                pos_fraction=0.25,
+                pos_fraction=0.5,
                 neg_pos_ub=-1,
                 add_gt_as_proposals=True,
             ),
@@ -133,7 +133,7 @@ model = dict(
             min_bbox_size=0,
         ),
         rcnn=dict(
-            score_thr=0.001,
+            score_thr=0.1,
             nms=dict(type="nms", iou_threshold=mask_iou_threshold),
             max_per_img=1000,
             mask_thr_binary=0.5,

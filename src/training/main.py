@@ -1,3 +1,4 @@
+import glob
 from sklearn.model_selection import StratifiedKFold
 
 
@@ -9,7 +10,6 @@ from data.transforms import define_pipelines
 from data.dataset import SartoriusDataset
 
 from utils.torch import seed_everything, count_parameters, save_model_weights
-from utils.metrics import evaluate_results
 
 
 def train(config, df_train, df_val, pipelines, fold, log_folder=None):
@@ -30,10 +30,17 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
     """
     seed_everything(config.seed)
 
+    if config.pretrained_folder is not None:
+        pretrained_weights = sorted(glob.glob(config.pretrained_folder + "*.pt"))
+        weights = pretrained_weights[fold]
+        assert weights.endswith(f"_{fold}.pt"), pretrained_weights
+    else:
+        weights = None
+
     model = define_model(
         config.model_config,
         reduce_stride=config.reduce_stride,
-        pretrained=config.pretrained,
+        pretrained_weights=weights,
     ).to(config.device)
     model.zero_grad()
 
@@ -113,9 +120,5 @@ def k_fold(config, log_folder=None):
 
             if log_folder is None or len(config.selected_folds) == 1:
                 return results
-
-    dataset = SartoriusDataset(df, transforms=pipelines['test'])
-    cv_score = evaluate_results(dataset, results)
-    print(f'\n -> CV IoU mAP : {cv_score:.3f}')
 
     return all_results

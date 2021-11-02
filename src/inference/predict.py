@@ -20,7 +20,7 @@ def predict(dataset, model, batch_size=16, use_tta=False, device="cuda"):
     Returns:
         torch tensor [H x W]: Prediction on the image.
     """
-    _, loader = define_loaders(None, dataset, val_bs=batch_size, num_workers=0)
+    loader = define_loaders(None, dataset, val_bs=batch_size, num_workers=0)[1]
     all_results = []
 
     model.eval()
@@ -33,7 +33,6 @@ def predict(dataset, model, batch_size=16, use_tta=False, device="cuda"):
                 raise NotImplementedError
 
             results = model(**batch, return_loss=False, rescale=True)
-
             all_results += results
 
     return all_results

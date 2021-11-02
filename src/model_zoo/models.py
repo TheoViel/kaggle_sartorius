@@ -8,8 +8,8 @@ from mmdet.models.builder import build_detector
 from utils.torch import load_model_weights  # noqa  TODO : pretrain
 
 
-def define_model(config_file, reduce_stride=False, pretrained=False, verbose=0):
-    model_cfg = Config.fromfile("model_zoo/config.py")
+def define_model(config_file, reduce_stride=False, pretrained_weights=None, verbose=0):
+    model_cfg = Config.fromfile(config_file)
 
     model = build_detector(
         model_cfg.model,
@@ -26,20 +26,12 @@ def define_model(config_file, reduce_stride=False, pretrained=False, verbose=0):
         logging.disable(logging.NOTSET)
 
     if reduce_stride:
-        # pass
         model.backbone.conv1.stride = (1, 1)
-        # model.roi_head.mask_head.upsample.stride = (1, 1)
-        # model.roi_head.mask_head.scale_factor = 1
-
-        # for block in [model.roi_head.mask_roi_extractor, model.roi_head.bbox_roi_extractor]:
-        #     for roi_layer in block.roi_layers:
-        #         roi_layer.spatial_scale *= 2
-
-        # change roialign ?
 
     model = MMDataParallel(model)
 
-    if pretrained:
-        model = load_model_weights(model, '../logs/2021-10-29/2/maskrcnn_0.pt', verbose=1)
+    if pretrained_weights is not None:
+        model = load_model_weights(model, pretrained_weights, verbose=1)
+        # TODO : do not hardcode path
 
     return model
