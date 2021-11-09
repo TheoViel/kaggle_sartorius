@@ -19,5 +19,7 @@ datasets/
 *.bin
 *.npy
 *.npz
+*.pt
+*.pth
 input/LIVECell_dataset_2021/
 input/train_semi_supervised/

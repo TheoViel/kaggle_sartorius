@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import shutil
 import datetime
 
 
@@ -75,9 +76,9 @@ def prepare_log_folder(log_path):
     return log_folder
 
 
-def save_config(config, path):
+def save_config(config, folder):
     """
-    Saves a config as a json and pandas dataframe
+    Saves a config as a json, copies data and model configs.
 
     Args:
         config (Config): Config.
@@ -86,8 +87,17 @@ def save_config(config, path):
     Returns:
         pandas dataframe: Config as a dataframe
     """
+    data_config_file = folder + config.data_config.split('/')[-1]
+    model_config_file = folder + config.model_config.split('/')[-1]
+
+    shutil.copyfile(config.data_config, data_config_file)
+    shutil.copyfile(config.model_config, model_config_file)
+
+    config.data_config = data_config_file
+    config.model_config_file = model_config_file
+
     dic = config.__dict__.copy()
     del dic["__doc__"], dic["__module__"], dic["__dict__"], dic["__weakref__"]
 
-    with open(path, "w") as f:
+    with open(folder + "config.json", "w") as f:
         json.dump(dic, f)

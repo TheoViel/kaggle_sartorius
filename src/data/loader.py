@@ -31,7 +31,7 @@ def define_loaders(
             batch_size=batch_size,
             shuffle=True,
             drop_last=True,
-            num_workers=num_workers,
+            num_workers=min(num_workers, batch_size),
             collate_fn=partial(collate, samples_per_gpu=batch_size),
             pin_memory=False,
             worker_init_fn=worker_init_fn
@@ -43,7 +43,7 @@ def define_loaders(
             batch_size=val_bs,
             shuffle=False,
             collate_fn=partial(collate, samples_per_gpu=batch_size),
-            num_workers=num_workers,
+            num_workers=min(num_workers, val_bs),
             pin_memory=True,
         )
 

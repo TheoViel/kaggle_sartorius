@@ -5,7 +5,7 @@ import pandas as pd
 from params import DATA_PATH, OUT_PATH, TRAIN_IMG_PATH
 
 
-def prepare_data():
+def prepare_data(fix=False):
     df = pd.read_csv(DATA_PATH + "train.csv")
     df = df.groupby('id').agg(list).reset_index()
     for col in df.columns[2:]:
@@ -14,7 +14,10 @@ def prepare_data():
         )
     df['img_path'] = TRAIN_IMG_PATH + df['id'] + ".png"
 
-    df_mmdet = pd.read_csv(OUT_PATH + "mmdet_data.csv")
+    if fix:
+        df_mmdet = pd.read_csv(OUT_PATH + "mmdet_data.csv")
+    else:
+        df_mmdet = pd.read_csv(OUT_PATH + "mmdet_data_nofix.csv")
 
     df_mmdet['ann'] = df_mmdet['ann'].apply(ast.literal_eval)
     df_mmdet['id'] = df_mmdet['filename'].apply(lambda x: x[:-4])

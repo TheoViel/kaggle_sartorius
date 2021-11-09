@@ -1,7 +1,8 @@
 import skimage
+import pycocotools
 import numpy as np
-from tqdm.notebook import tqdm  # noqa
-from multiprocessing import Pool
+
+from inference.post_process import post_process_preds
 
 
 def compute_iou(labels, y_pred):
@@ -88,105 +89,51 @@ def iou_map(truths, preds, verbose=0, ious=None):
     if verbose:
         print("Thresh\tTP\tFP\tFN\tPrec.")
 
-    prec = []
+    all_precs = []
     for t in np.arange(0.5, 1.0, 0.05):
         tps, fps, fns = 0, 0, 0
+        prec = []
         for iou in ious:
             tp, fp, fn = precision_at(t, iou)
             tps += tp
             fps += fp
             fns += fn
 
-        p = tps / (tps + fps + fns) if tps else 0
-        prec.append(p)
+            p = tps / (tps + fps + fns) if tps else 0
+            prec.append(p)
 
+        all_p = np.mean(prec)
+        all_precs.append(p)
         if verbose:
-            print("{:1.3f}\t{}\t{}\t{}\t{:1.3f}".format(t, tps, fps, fns, p))
+            print("{:1.3f}\t{}\t{}\t{}\t{:1.3f}".format(t, tps, fps, fns, all_p))
 
     if verbose:
-        print("AP\t-\t-\t-\t{:1.3f}".format(np.mean(prec)))
+        print("AP\t-\t-\t-\t{:1.3f}".format(np.mean(all_precs)))
 
-    return np.mean(prec)
+    return np.mean(all_precs)
 
 
-def evaluate_results(dataset, results, threshold=0.5, num_classes=1, verbose=0):
-    ious = []
+def evaluate_results(
+    dataset, results, thresholds_conf=0.5, thresholds_mask=0.5, verbose=0, remove_overlap=False
+):
+    precs = []
     for idx in range(len(dataset)):
-
         # retrieve masks
-        if num_classes == 1:
-            # remove low confidence
-            scores = np.concatenate(results[idx][0])[:, -1]
-            last = np.argmax(scores < threshold) if len(scores) else 0
-            if not last:
-                continue
-
-            masks_pred = np.array(results[idx][1][0][:last]).astype(int)
-        else:
-            raise NotImplementedError()
-            masks_pred = np.concatenate(results[idx][1]).astype(int)
-
-        masks_truth = dataset.masks[idx].masks
-
-        # # convert to format for metric
-        mask_truth = np.zeros(masks_truth.shape[1:], dtype=int)
-        for i in range(len(masks_truth)):
-            mask_truth = np.where(
-                np.logical_and(masks_truth[i], mask_truth == 0), i + 1, mask_truth
-            )
-
-        mask_pred = np.zeros(masks_pred.shape[1:], dtype=int)
-        for i in range(len(masks_pred)):
-            mask_pred = np.where(
-                np.logical_and(masks_pred[i], mask_pred == 0), i + 1, mask_pred
-            )
-
-        ious.append(compute_iou(mask_truth, mask_pred))
-
-    return iou_map(None, None, verbose=verbose, ious=ious)
-
-
-def compute_ious(idx, dataset, results, threshold):
-    scores = np.concatenate(results[idx][0])[:, -1]
-    last = np.argmax(scores < threshold) if len(scores) else 0
-    if not last:
-        return
-
-    masks_pred = np.array(results[idx][1][0][:last]).astype(int)
-    masks_truth = dataset.masks[idx].masks
-
-    # convert to format for metric
-    mask_truth = np.zeros(masks_truth.shape[1:], dtype=int)
-    for i in range(len(masks_truth)):
-        mask_truth = np.where(
-            np.logical_and(masks_truth[i], mask_truth == 0), i + 1, mask_truth
+        masks, _ = post_process_preds(
+            results[idx],
+            thresholds_conf=thresholds_conf,
+            thresholds_mask=thresholds_mask,
+            remove_overlap=remove_overlap
         )
 
-    mask_pred = np.zeros(masks_pred.shape[1:], dtype=int)
-    for i in range(len(masks_pred)):
-        mask_pred = np.where(
-            np.logical_and(masks_pred[i], mask_pred == 0), i + 1, mask_pred
-        )
+        if not len(masks):
+            precs.append(0)
+            continue
 
-    return compute_iou(mask_truth, mask_pred)
+        rle_pred = [pycocotools.mask.encode(np.asarray(p, order='F')) for p in masks]
+        rle_truth = dataset.encodings[idx].tolist()
 
+        iou = pycocotools.mask.iou(rle_pred, rle_truth, [0] * len(rle_truth))
+        precs.append(iou_map(None, None, verbose=verbose, ious=[iou]))
 
-def compute_ious_(idx):
-    return compute_ious(idx=idx, dataset=DATASET, results=RESULTS, threshold=THRESHOLD)
-
-
-def evaluate_results_multiproc(dataset, results, threshold=0.5, verbose=0):
-    global DATASET
-    DATASET = dataset
-    global RESULTS
-    RESULTS = results
-    global THRESHOLD
-    THRESHOLD = threshold
-
-    ious = []
-    with Pool(processes=4) as p:
-        for iou in p.map(compute_ious_, range(len(dataset))):
-            if iou is not None:
-                ious.append(iou)
-
-    return iou_map(None, None, verbose=verbose, ious=ious)
+    return np.mean(precs)

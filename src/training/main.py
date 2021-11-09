@@ -6,7 +6,7 @@ from model_zoo.models import define_model
 from training.train import fit
 
 from data.preparation import prepare_data
-from data.transforms import define_pipelines
+from data.transforms import define_pipelines, to_mosaic
 from data.dataset import SartoriusDataset
 
 from utils.torch import seed_everything, count_parameters, save_model_weights
@@ -50,6 +50,9 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
         df_train,
         transforms=pipelines['train'],
     )
+    if config.use_mosaic:
+        train_dataset = to_mosaic(config, train_dataset)
+
     val_dataset = SartoriusDataset(
         df_val,
         transforms=pipelines['val'],
@@ -69,6 +72,7 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
         val_dataset,
         predict_dataset,
         optimizer_name=config.optimizer,
+        scheduler_name=config.scheduler,
         epochs=config.epochs,
         batch_size=config.batch_size,
         val_bs=config.val_bs,
@@ -99,7 +103,7 @@ def k_fold(config, log_folder=None):
         log_folder (None or str, optional): Folder to logs results to. Defaults to None.
     """
 
-    df = prepare_data()
+    df = prepare_data(fix=config.fix)
 
     skf = StratifiedKFold(n_splits=config.k, shuffle=True, random_state=config.random_state)
     splits = list(skf.split(X=df, y=df["cell_type"]))

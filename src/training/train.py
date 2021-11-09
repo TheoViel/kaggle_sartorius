@@ -2,12 +2,12 @@ import gc
 import time
 import torch
 import traceback
-from transformers import get_linear_schedule_with_warmup
+from tqdm.notebook import tqdm  # noqa
 
 from data.loader import define_loaders
-from training.optim import define_optimizer
+from training.optim import define_optimizer, define_scheduler
 from inference.predict import predict
-from utils.metrics import evaluate_results_multiproc, evaluate_results  # noqa
+from utils.metrics import evaluate_results
 
 
 def fit(
@@ -16,6 +16,7 @@ def fit(
     val_dataset,
     predict_dataset,
     optimizer_name="Adam",
+    scheduler_name="linear",
     epochs=50,
     batch_size=32,
     val_bs=32,
@@ -68,9 +69,7 @@ def fit(
 
     num_warmup_steps = int(warmup_prop * epochs * len(train_loader))
     num_training_steps = int(epochs * len(train_loader))
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps, num_training_steps
-    )
+    scheduler = define_scheduler(scheduler_name, optimizer, num_warmup_steps, num_training_steps)
 
     for epoch in range(1, epochs+1):
         model.train()
@@ -105,7 +104,7 @@ def fit(
                 loss.backward()
                 avg_loss += loss.item() / len(train_loader)
 
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 10.)
 
                 optimizer.step()
                 scheduler.step()
@@ -115,6 +114,10 @@ def fit(
 
         model.eval()
         avg_val_loss, iou_map = 0, 0
+
+        # print('Memory Usage :')
+        # print('Allocated:', round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1), 'GB')
+        # print('Cached:   ', round(torch.cuda.memory_reserved(0) / 1024 ** 3, 1), 'GB')
 
         do_eval = (epoch >= first_epoch_eval and not epoch % verbose_eval) or (epoch == epochs)
         if do_eval:

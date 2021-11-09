@@ -51,15 +51,18 @@ class Config:
     # General
     seed = 42
     verbose = 1
-    first_epoch_eval = 10
+    first_epoch_eval = 0
     compute_val_loss = False
-    verbose_eval = 10
+    verbose_eval = 5
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     save_weights = True
 
     # Images
+    fix = False
+    use_mosaic = False
     use_tta = False  # TODO
+    # data_config = "data/config_mosaic.py" if use_mosaic else "data/config.py"
     data_config = "data/config.py"
 
     # k-fold
@@ -68,20 +71,32 @@ class Config:
     selected_folds = [0, 1, 2, 3, 4]
 
     # Model
+    name = "maskrcnn"  # "cascade"
     reduce_stride = False
-    model_config = "model_zoo/config.py"
-    name = "maskrcnn"
+    pretrain = False
+
+    if pretrain and reduce_stride:
+        model_config = f"model_zoo/config_{name}_stride_pretrain.py"
+    elif pretrain:
+        model_config = f"model_zoo/config_{name}_pretrain.py"
+    elif reduce_stride:
+        model_config = f"model_zoo/config_{name}_stride.py"
+    else:
+        model_config = f"model_zoo/config_{name}.py"
+
     pretrained_folder = None
+    # pretrained_folder = "../logs/2021-11-04/6/"
 
     # Training
     optimizer = "Adam"
-    weight_decay = 0  # 0.0001
-    batch_size = 8
+    scheduler = "plateau" if optimizer == "SGD" else "linear"
+    weight_decay = 0.0005 if optimizer == "SGD" else 0
+    batch_size = 4 if reduce_stride else 8
     val_bs = batch_size
 
     epochs = 50
 
-    lr = 2e-3
+    lr = 5e-4  # 1e-3
     warmup_prop = 0.05
 
     use_fp16 = False  # TODO
@@ -95,18 +110,23 @@ if __name__ == "__main__":
     config = Config
     config.selected_folds = [args.fold]
 
-    if args.reduce_stride:
+    if args.reduce_stride and not config.reduce_stride:
+        # Update config to reduced stride
         config.reduce_stride = True
-        config.model_config = "model_zoo/config_stride.py"
-        config.lr /= 2
+        config.model_config = f"model_zoo/config_{config.name}_stride.py"
         config.batch_size //= 2
-        config.warmup_prop *= 2
 
-    config.pretrained_folder = args.pretrained_folder
+    if config.pretrained_folder is None and args.pretrained_folder is not None:
+        # Update params
+        config.pretrained_folder = args.pretrained_folder
+        config.warmup_prop = 0.1
+        config.lr /= 2
+        config.epochs -= 10
+        config.scheduler = "plateau"
 
     log_folder = args.log_folder
 
-    save_config(Config, log_folder + "config.json")
+    save_config(Config, log_folder)
     create_logger(directory=log_folder, name="logs.txt")
 
     k_fold(Config, log_folder=log_folder)

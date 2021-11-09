@@ -3,7 +3,7 @@
 import torch
 import numpy as np
 
-NUM_WORKERS = 0  # issues with evaluate_results_multiproc
+NUM_WORKERS = 0
 
 DATA_PATH = "../input/"
 TRAIN_IMG_PATH = DATA_PATH + "train/"
@@ -20,6 +20,6 @@ NUM_CLASSES = len(CELL_TYPES)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-SIZE = 256
+SIZE = 512
 
 ORIG_SIZE = (520, 704)

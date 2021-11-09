@@ -9,7 +9,7 @@ from params import CELL_TYPES, ORIG_SIZE
 
 
 RESULTS_PH = {
-    'scale_factor': 1.,  # np.ones(4),
+    # 'scale_factor': 1.,  # np.ones(4, dtype=np.float32),  # if no resizing in augs
     "pad_shape": (0, 0),
     "img_norm_cfg": None,
     "flip_direction": None,
@@ -68,7 +68,7 @@ class SartoriusDataset(Dataset):
         results = {
             "img": image,
             "gt_bboxes": self.boxes[idx],
-            "gt_labels": self.class_labels[idx] * 0,
+            "gt_labels": self.class_labels[idx],
             "gt_masks": masks,
             "img_shape": image.shape[:2],
             "ori_shape": image.shape[:2],
@@ -79,13 +79,57 @@ class SartoriusDataset(Dataset):
 
         results_transfo = None
         while results_transfo is None:
-            results_transfo = self.transforms(results.copy())
-
-        # if 'scale_factor' not in results_transfo.keys():
-        #     results_transfo['scale_factor'] = np.ones(4)
+            try:
+                results_transfo = self.transforms(results.copy())
+            except KeyError:
+                results['scale_factor'] = 1.
+                results_transfo = self.transforms(results.copy())
 
         return results_transfo
 
     def _load_masks(self, mask, shape):
         h, w = shape
         return BitmapMasks([pycocotools.mask.decode(m) for m in mask], h, w)
+
+
+class SartoriusInferenceDataset(Dataset):
+    """
+    Segmentation dataset for training / validation.
+    """
+    def __init__(self, df, transforms, precompute_masks=True):
+        """
+        Constructor.
+
+        Args:
+            df (pandas dataframe): Metadata.
+            transforms (albumentation transforms, optional): Transforms to apply. Defaults to None.
+            train (bool, optional): Indicates if the dataset is used for training. Defaults to True.
+        """
+
+        self.df = df
+        self.transforms = transforms
+
+        self.img_paths = df["img_path"].values
+
+    def __len__(self):
+        return self.df.shape[0]
+
+    def __getitem__(self, idx):
+        image = cv2.imread(self.img_paths[idx])
+
+        results = {
+            "img": image,
+            "img_shape": image.shape[:2],
+            "ori_shape": image.shape[:2],
+            "filename": self.img_paths[idx],
+            'ori_filename': self.img_paths[idx],
+        }
+        results.update(RESULTS_PH)
+        del results['bbox_fields'], results['mask_fields']
+
+        results_transfo = self.transforms(results.copy())
+
+        # if 'scale_factor' not in results_transfo.keys():
+        #     results_transfo['scale_factor'] = np.ones(4)
+
+        return results_transfo
