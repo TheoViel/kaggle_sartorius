@@ -30,10 +30,33 @@ val_pipeline = [
 ]
 
 test_pipeline = [
-    dict(type="Pad", size_divisor=32, pad_val=dict(img=(130, 130, 130), masks=0, seg=255)),
-    dict(type="Normalize", **img_norm_cfg),
-    dict(type='ImageToTensor', keys=['img']),
-    dict(type="Collect", keys=["img"])
+    dict(
+        type='MultiScaleFlipAug',
+        img_scale=[(520, 704)],
+        flip=False,
+        transforms=[
+            dict(type="Pad", size_divisor=32, pad_val=dict(img=(130, 130, 130), masks=0, seg=255)),
+            dict(type="Normalize", **img_norm_cfg),
+            dict(type='ImageToTensor', keys=['img']),
+            dict(type="Collect", keys=["img"])
+        ]
+    )
+]
+
+test_pipeline_tta = [
+    dict(
+        type='MultiScaleFlipAug',
+        img_scale=[(520, 704)],
+        flip=True,
+        flip_direction=['horizontal', 'vertical', "diagonal"],
+        transforms=[
+            dict(type='RandomFlip'),
+            dict(type="Pad", size_divisor=32, pad_val=dict(img=(130, 130, 130), masks=0, seg=255)),
+            dict(type="Normalize", **img_norm_cfg),
+            dict(type='ImageToTensor', keys=['img']),
+            dict(type="Collect", keys=["img"])
+        ]
+    )
 ]
 
 
@@ -48,4 +71,5 @@ data = dict(
     val_viz=dict(pipeline=val_viz_pipeline),
     test=dict(pipeline=test_pipeline),
     test_viz=dict(pipeline=test_viz_pipeline),
+    test_tta=dict(pipeline=test_pipeline_tta)
 )

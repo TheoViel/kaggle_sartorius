@@ -1,22 +1,56 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/models/mask_rcnn_r50_fpn.py
 
 num_classes = 3
-mask_iou_threshold = 0.5
+mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
+backbone = "resnet101"
 
-model = dict(
-    type="MaskRCNN",
-    pretrained="torchvision://resnet50",
-    backbone=dict(
+pretrained_weights = {
+    "resnet50": "../input/weights/mask_rcnn_r50_fpn_mstrain-poly_3x_coco.pth",
+    "resnet101": "../input/weights/mask_rcnn_r101_fpn_mstrain-poly_3x_coco.pth",
+    "resnext101": "../input/weights/mask_rcnn_x101_32x4d_fpn_mstrain-poly_3x_coco.pth",
+}
+
+# pretrained_weights = maskrcnn_weights[backbone]
+
+backbones = dict(
+    resnet50=dict(
         type="ResNet",
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=-1,
+        frozen_stages=1,  # -1
         norm_cfg=dict(type="BN", requires_grad=True),
         norm_eval=True,
         style="pytorch",
     ),
+    resnet101=dict(
+        type="ResNet",
+        depth=101,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=1,  # -1
+        norm_cfg=dict(type="BN", requires_grad=True),
+        norm_eval=True,
+        style="pytorch",
+    ),
+    resnext101=dict(
+        type="ResNeXt",
+        depth=101,
+        groups=32,
+        base_width=4,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=1,
+        norm_cfg=dict(type="BN", requires_grad=True),
+        style="pytorch",
+    ),
+)
+
+
+model = dict(
+    type="MaskRCNN",
+    backbone="",
     neck=dict(
         type="FPN", in_channels=[256, 512, 1024, 2048], out_channels=256, num_outs=5
     ),
@@ -26,9 +60,9 @@ model = dict(
         feat_channels=256,
         anchor_generator=dict(
             type="AnchorGenerator",
-            scales=[4],  # 8 ?
-            ratios=[0.25, 0.5, 1.0, 2.0, 4.0],   # extended
-            strides=[4, 8, 16, 32, 64],
+            scales=[8],
+            ratios=[0.5, 1.0, 2.0],
+            strides=[2, 4, 8, 16, 32],
         ),
         bbox_coder=dict(
             type="DeltaXYWHBBoxCoder",
@@ -44,7 +78,7 @@ model = dict(
             type="SingleRoIExtractor",
             roi_layer=dict(type="RoIAlign", output_size=7, sampling_ratio=0),
             out_channels=256,
-            featmap_strides=[4, 8, 16, 32],
+            featmap_strides=[2, 4, 8, 16],
         ),
         bbox_head=dict(
             type="Shared2FCBBoxHead",
@@ -65,7 +99,7 @@ model = dict(
             type="SingleRoIExtractor",
             roi_layer=dict(type="RoIAlign", output_size=14, sampling_ratio=0),
             out_channels=256,
-            featmap_strides=[4, 8, 16, 32],
+            featmap_strides=[2, 4, 8, 16],
         ),
         mask_head=dict(
             type="FCNMaskHead",
@@ -89,7 +123,7 @@ model = dict(
             ),
             sampler=dict(
                 type="RandomSampler",
-                num=128,
+                num=256,
                 pos_fraction=0.5,
                 neg_pos_ub=-1,
                 add_gt_as_proposals=False,
@@ -115,8 +149,8 @@ model = dict(
             ),
             sampler=dict(
                 type="RandomSampler",
-                num=128,
-                pos_fraction=0.5,
+                num=512,
+                pos_fraction=0.25,
                 neg_pos_ub=-1,
                 add_gt_as_proposals=True,
             ),

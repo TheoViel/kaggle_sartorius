@@ -96,8 +96,6 @@ def fit(
                         scheduler.step()
 
             else:
-                # print(batch['img'].data[0].size())
-
                 losses = model(**batch, return_loss=True)
                 loss, _ = model.module._parse_losses(losses)
 
@@ -115,10 +113,6 @@ def fit(
         model.eval()
         avg_val_loss, iou_map = 0, 0
 
-        # print('Memory Usage :')
-        # print('Allocated:', round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1), 'GB')
-        # print('Cached:   ', round(torch.cuda.memory_reserved(0) / 1024 ** 3, 1), 'GB')
-
         do_eval = (epoch >= first_epoch_eval and not epoch % verbose_eval) or (epoch == epochs)
         if do_eval:
             if compute_val_loss:
@@ -130,11 +124,10 @@ def fit(
                         avg_val_loss += loss.item() / len(val_loader)
 
             results = predict(
-                predict_dataset, model, batch_size=1, use_tta=False, device=device
+                predict_dataset, model, batch_size=1, device=device
             )
             try:
-                iou_map = evaluate_results(predict_dataset, results)
-                # iou_map = evaluate_results_multiproc(predict_dataset, results)
+                iou_map, _ = evaluate_results(predict_dataset, results)
             except Exception:
                 traceback.print_exc()
                 print()

@@ -16,7 +16,11 @@ RESULTS_PH = {
     "flip": None,
     'img_fields': ["img"],
     'bbox_fields': ["gt_bboxes"],
-    'mask_fields': ["gt_masks"]
+    'mask_fields': ["gt_masks"],
+    # 'img_prefix': None,
+    # 'img_info': {
+    #     'filename': ""
+    # }
 }
 
 

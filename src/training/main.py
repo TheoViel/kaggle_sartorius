@@ -39,7 +39,7 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
 
     model = define_model(
         config.model_config,
-        reduce_stride=config.reduce_stride,
+        encoder=config.encoder,
         pretrained_weights=weights,
     ).to(config.device)
     model.zero_grad()

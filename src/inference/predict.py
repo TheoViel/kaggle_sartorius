@@ -3,10 +3,8 @@ from tqdm.notebook import tqdm  # noqa
 
 from data.loader import define_loaders
 
-FLIPS = [[-1], [-2], [-2, -1]]
 
-
-def predict(dataset, model, batch_size=16, use_tta=False, device="cuda"):
+def predict(dataset, model, batch_size=16, device="cuda"):
     """
     Performs inference on an image.
     TODO
@@ -26,12 +24,6 @@ def predict(dataset, model, batch_size=16, use_tta=False, device="cuda"):
     model.eval()
     with torch.no_grad():
         for batch in loader:
-            if not use_tta:
-                for b in batch:
-                    batch[b] = [batch[b]]  # no tta
-            else:
-                raise NotImplementedError
-
             results = model(**batch, return_loss=False, rescale=True)
             all_results += results
 

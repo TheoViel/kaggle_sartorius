@@ -116,10 +116,9 @@ def iou_map(truths, preds, verbose=0, ious=None):
 def evaluate_results(
     dataset, results, thresholds_conf=0.5, thresholds_mask=0.5, verbose=0, remove_overlap=False
 ):
-    precs = []
+    precs = [[], [], []]
     for idx in range(len(dataset)):
-        # retrieve masks
-        masks, _ = post_process_preds(
+        masks, _, cell_type = post_process_preds(
             results[idx],
             thresholds_conf=thresholds_conf,
             thresholds_mask=thresholds_mask,
@@ -127,13 +126,14 @@ def evaluate_results(
         )
 
         if not len(masks):
-            precs.append(0)
+            precs[cell_type].append(0)
             continue
 
         rle_pred = [pycocotools.mask.encode(np.asarray(p, order='F')) for p in masks]
         rle_truth = dataset.encodings[idx].tolist()
 
         iou = pycocotools.mask.iou(rle_pred, rle_truth, [0] * len(rle_truth))
-        precs.append(iou_map(None, None, verbose=verbose, ious=[iou]))
+        score = iou_map(None, None, verbose=verbose, ious=[iou])
+        precs[cell_type].append(score)
 
-    return np.mean(precs)
+    return np.mean(np.concatenate(precs)), [np.mean(p) for p in precs]

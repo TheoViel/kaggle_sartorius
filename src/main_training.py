@@ -26,17 +26,31 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--reduce_stride",
-        type=bool,
-        default=False,
-        help="Whether to reduce stride",
-    )
-
-    parser.add_argument(
         "--pretrained_folder",
         type=str,
         default=None,
         help="Folder for pretrained weights",
+    )
+
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=None,
+        help="Learning rate",
+    )
+
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=None,
+        help="Epochs",
+    )
+
+    parser.add_argument(
+        "--encoder",
+        type=str,
+        default=None,
+        help="Encoder",
     )
 
     args = parser.parse_args()
@@ -61,7 +75,7 @@ class Config:
     # Images
     fix = False
     use_mosaic = False
-    use_tta = False  # TODO
+
     # data_config = "data/config_mosaic.py" if use_mosaic else "data/config.py"
     data_config = "data/config.py"
 
@@ -72,31 +86,21 @@ class Config:
 
     # Model
     name = "maskrcnn"  # "cascade"
-    reduce_stride = False
-    pretrain = False
-
-    if pretrain and reduce_stride:
-        model_config = f"model_zoo/config_{name}_stride_pretrain.py"
-    elif pretrain:
-        model_config = f"model_zoo/config_{name}_pretrain.py"
-    elif reduce_stride:
-        model_config = f"model_zoo/config_{name}_stride.py"
-    else:
-        model_config = f"model_zoo/config_{name}.py"
+    encoder = "resnet101"
+    model_config = f"model_zoo/config_{name}.py"
 
     pretrained_folder = None
-    # pretrained_folder = "../logs/2021-11-04/6/"
 
     # Training
     optimizer = "Adam"
     scheduler = "plateau" if optimizer == "SGD" else "linear"
     weight_decay = 0.0005 if optimizer == "SGD" else 0
-    batch_size = 4 if reduce_stride else 8
+    batch_size = 4
     val_bs = batch_size
 
-    epochs = 50
+    epochs = 40
 
-    lr = 5e-4  # 1e-3
+    lr = 3e-4
     warmup_prop = 0.05
 
     use_fp16 = False  # TODO
@@ -110,19 +114,17 @@ if __name__ == "__main__":
     config = Config
     config.selected_folds = [args.fold]
 
-    if args.reduce_stride and not config.reduce_stride:
-        # Update config to reduced stride
-        config.reduce_stride = True
-        config.model_config = f"model_zoo/config_{config.name}_stride.py"
-        config.batch_size //= 2
+    if args.epochs is not None:
+        config.epochs = args.epochs
 
-    if config.pretrained_folder is None and args.pretrained_folder is not None:
-        # Update params
+    if args.lr is not None:
+        config.lr = args.lr
+
+    if args.encoder is not None:
+        config.encoder = args.encoder
+
+    if args.pretrained_folder is not None:
         config.pretrained_folder = args.pretrained_folder
-        config.warmup_prop = 0.1
-        config.lr /= 2
-        config.epochs -= 10
-        config.scheduler = "plateau"
 
     log_folder = args.log_folder
 

@@ -9,14 +9,20 @@ from mmdet.models.builder import build_detector
 from utils.torch import load_model_weights
 
 
-def define_model(config_file, reduce_stride=False, pretrained_weights=None, verbose=0):
-    model_cfg = Config.fromfile(config_file)
+def define_model(config_file, encoder="resnet50", pretrained_weights=None, verbose=0):
+    cfg = Config.fromfile(config_file)
 
-    model = build_detector(
-        model_cfg.model,
-        model_cfg.get('train_cfg'),
-        model_cfg.get('test_cfg')
-    ).cpu()
+    cfg.model.backbone = cfg.backbones[encoder]
+
+    try:
+        weights = cfg.pretrained_weights[encoder]
+    except KeyError:
+        weights = None
+
+    model = build_detector(cfg.model)
+
+    model.test_cfg = cfg['model']['test_cfg']
+    model.train_cfg = cfg['model']['train_cfg']
 
     if not verbose:
         logging.disable(sys.maxsize)
@@ -26,17 +32,17 @@ def define_model(config_file, reduce_stride=False, pretrained_weights=None, verb
     if not verbose:  # re-enable
         logging.disable(logging.NOTSET)
 
-    if reduce_stride:
+    if "resnet" in encoder or 'resnext' in encoder:
         model.backbone.conv1.stride = (1, 1)
 
     model = MMDataParallel(model)
 
     if pretrained_weights is not None:
         model = load_model_weights(model, pretrained_weights, verbose=1)
-    elif "pretrained_weights" in model_cfg.keys():
-        print(f"\n -> Loading weights from {model_cfg['pretrained_weights']}\n")
+    elif weights is not None:
+        print(f"\n -> Loading weights from {weights}\n")
 
-        dic = torch.load(model_cfg['pretrained_weights'])['state_dict']
+        dic = torch.load(weights)['state_dict']
 
         del dic['roi_head.bbox_head.fc_cls.weight']
         del dic['roi_head.bbox_head.fc_cls.bias']
