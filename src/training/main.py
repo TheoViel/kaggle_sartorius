@@ -1,18 +1,18 @@
-import glob
 from sklearn.model_selection import StratifiedKFold
-
 
 from model_zoo.models import define_model
 from training.train import fit
 
-from data.preparation import prepare_data
+from data.preparation import prepare_data, prepare_extra_data
 from data.transforms import define_pipelines, to_mosaic
 from data.dataset import SartoriusDataset
 
 from utils.torch import seed_everything, count_parameters, save_model_weights
 
 
-def train(config, df_train, df_val, pipelines, fold, log_folder=None):
+def train(
+    config, df_train, df_val, pipelines, fold, log_folder=None, precompute_masks=True, df_extra=None
+):
     """
     Trains a model.
     TODO
@@ -30,17 +30,10 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
     """
     seed_everything(config.seed)
 
-    if config.pretrained_folder is not None:
-        pretrained_weights = sorted(glob.glob(config.pretrained_folder + "*.pt"))
-        weights = pretrained_weights[fold]
-        assert weights.endswith(f"_{fold}.pt"), pretrained_weights
-    else:
-        weights = None
-
     model = define_model(
         config.model_config,
         encoder=config.encoder,
-        pretrained_weights=weights,
+        pretrained_livecell=config.pretrained_livecell,
     ).to(config.device)
     model.zero_grad()
 
@@ -49,6 +42,8 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
     train_dataset = SartoriusDataset(
         df_train,
         transforms=pipelines['train'],
+        precompute_masks=precompute_masks,
+        df_extra=df_extra,
     )
     if config.use_mosaic:
         train_dataset = to_mosaic(config, train_dataset)
@@ -56,10 +51,12 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
     val_dataset = SartoriusDataset(
         df_val,
         transforms=pipelines['val'],
+        precompute_masks=precompute_masks,
     )
     predict_dataset = SartoriusDataset(
         df_val,
         transforms=pipelines['test'],
+        precompute_masks=precompute_masks,
     )
 
     print(f"    -> {len(train_dataset)} training images")
@@ -82,12 +79,14 @@ def train(config, df_train, df_val, pipelines, fold, log_folder=None):
         verbose_eval=config.verbose_eval,
         first_epoch_eval=config.first_epoch_eval,
         compute_val_loss=config.compute_val_loss,
+        num_classes=config.num_classes,
         use_fp16=config.use_fp16,
+        use_extra_samples=config.use_extra_samples,
         device=config.device,
     )
 
     if config.save_weights and log_folder is not None:
-        name = f"{config.name}_{fold}.pt"
+        name = f"{config.name}_{config.encoder}_{fold}.pt"
         save_model_weights(model, name, cp_folder=log_folder)
 
     return results
@@ -103,7 +102,13 @@ def k_fold(config, log_folder=None):
         log_folder (None or str, optional): Folder to logs results to. Defaults to None.
     """
 
-    df = prepare_data(fix=config.fix)
+    df = prepare_data(fix=False)
+    df_fix = prepare_data(fix=True)
+
+    if config.use_extra_samples > 0:
+        df_extra = prepare_extra_data(config.extra_name)
+    else:
+        df_extra = None
 
     skf = StratifiedKFold(n_splits=config.k, shuffle=True, random_state=config.random_state)
     splits = list(skf.split(X=df, y=df["cell_type"]))
@@ -114,12 +119,18 @@ def k_fold(config, log_folder=None):
         if i in config.selected_folds:
             print(f"\n-------------   Fold {i + 1} / {config.k}  -------------\n")
 
-            df_train = df.iloc[train_idx].copy().reset_index(drop=True)
+            if config.fix:
+                df_train = df_fix.iloc[train_idx].copy().reset_index(drop=True)
+            else:
+                df_train = df.iloc[train_idx].copy().reset_index(drop=True)
+
             df_val = df.iloc[val_idx].copy().reset_index(drop=True)
 
             pipelines = define_pipelines(config.data_config)
 
-            results = train(config, df_train, df_val, pipelines, i, log_folder=log_folder)
+            results = train(
+                config, df_train, df_val, pipelines, i, log_folder=log_folder, df_extra=df_extra
+            )
             all_results += results
 
             if log_folder is None or len(config.selected_folds) == 1:

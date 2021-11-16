@@ -1,9 +1,8 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/models/mask_rcnn_r50_fpn.py
 
-num_classes = 3
+num_classes = 3 + 7  # 8
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
-backbone = "resnet101"
 
 pretrained_weights = {
     "resnet50": "../input/weights/mask_rcnn_r50_fpn_mstrain-poly_3x_coco.pth",
@@ -11,7 +10,10 @@ pretrained_weights = {
     "resnext101": "../input/weights/mask_rcnn_x101_32x4d_fpn_mstrain-poly_3x_coco.pth",
 }
 
-# pretrained_weights = maskrcnn_weights[backbone]
+pretrained_weights_livecell = {
+    "resnet50": "../logs/pretrain/2021-11-12/0/maskrcnn_resnet50_0.pt",
+    "resnext101": "../logs/pretrain/2021-11-14/2/maskrcnn_resnext101_0.pt",
+}
 
 backbones = dict(
     resnet50=dict(
@@ -19,7 +21,7 @@ backbones = dict(
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,  # -1
+        frozen_stages=-1,  # 1
         norm_cfg=dict(type="BN", requires_grad=True),
         norm_eval=True,
         style="pytorch",
@@ -29,7 +31,7 @@ backbones = dict(
         depth=101,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,  # -1
+        frozen_stages=-1,  # 1
         norm_cfg=dict(type="BN", requires_grad=True),
         norm_eval=True,
         style="pytorch",
@@ -41,7 +43,7 @@ backbones = dict(
         base_width=4,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
+        frozen_stages=-1,  # 1
         norm_cfg=dict(type="BN", requires_grad=True),
         style="pytorch",
     ),
@@ -167,7 +169,7 @@ model = dict(
             min_bbox_size=0,
         ),
         rcnn=dict(
-            score_thr=0.5,
+            score_thr=0.25,
             nms=dict(type="nms", iou_threshold=mask_iou_threshold),
             max_per_img=1000,
             mask_thr_binary=-1,

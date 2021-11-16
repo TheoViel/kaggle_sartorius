@@ -17,6 +17,13 @@ BLUE = (32 / 255, 50 / 255, 155 / 255)
 RED = (238 / 255, 97 / 255, 55 / 255)
 
 
+def get_random_color():
+    color = tuple(np.random.random(size=3))
+    while np.max(color) - np.min(color) < 0.2:
+        color = tuple(np.random.random(size=3))
+    return color
+
+
 def plot_sample(img, mask=None, boxes=[], width=1, plotly=False):
     """
     Plots the contours of a given mask.
@@ -45,16 +52,16 @@ def plot_sample(img, mask=None, boxes=[], width=1, plotly=False):
         for i in range(len(mask)):
             mask[i] *= (i + 1)
 
-    if len(mask.shape) == 3:
-        if mask.max() == 1:
-            for i in range(len(mask)):
-                mask[i] *= (i + 1)
-        mask = mask.max(0)
-
     if mask is not None:
+        if len(mask.shape) == 3:
+            if mask.max() == 1:
+                for i in range(len(mask)):
+                    mask[i] *= (i + 1)
+            mask = mask.max(0)
+
         for i in range(1, int(np.max(mask)) + 1):
             m = ((mask == i) * 255).astype(np.uint8)
-            color = tuple(np.random.random(size=3))
+            color = get_random_color()
             colors.append(color)
 
             contours, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
@@ -65,7 +72,7 @@ def plot_sample(img, mask=None, boxes=[], width=1, plotly=False):
 
         # Add boxes
         for i, box in enumerate(boxes):
-            color = colors[i] if len(colors) else tuple(np.random.random(size=3))
+            color = colors[i] if len(colors) else get_random_color()
             rect = Rectangle(
                 (box[0], box[1]), box[2] - box[0], box[3] - box[1],
                 linewidth=1, edgecolor=color, facecolor='none', alpha=0.5
@@ -83,7 +90,7 @@ def get_centers(mask):
     return np.array(centers)
 
 
-def plot_preds_iou(img, preds, truths, width=1, plot_tp=True):
+def plot_preds_iou(img, preds, truths, boxes=None, boxes_2=None, width=1, plot_tp=True):
     """
     Plots the contours of a given mask.
     TODO
@@ -94,13 +101,25 @@ def plot_preds_iou(img, preds, truths, width=1, plot_tp=True):
     if len(img.shape) == 2:
         img = np.stack([img, img, img], -1)
 
-    img_ = img.copy()
-
     preds, _, _ = skimage.segmentation.relabel_sequential(preds)
     truths, _, _ = skimage.segmentation.relabel_sequential(truths)
     ious = compute_iou(truths, preds)
 
     centers_pred = get_centers(preds)
+
+    img_ = img.copy()
+
+    # Add boxes
+    if boxes is not None:
+        for box in boxes:
+            color = (0.5, 0, 0, 0.5)
+            img_ = cv2.rectangle(img_, (box[0], box[1]), (box[2], box[3]), color=color, thickness=1)
+
+    # Add boxes
+    if boxes_2 is not None:
+        for box in boxes_2:
+            color = (0., 0, 0.5, 0.5)
+            img_ = cv2.rectangle(img_, (box[0], box[1]), (box[2], box[3]), color=color, thickness=1)
 
     # Plot preds
     for i in range(1, int(np.max(preds)) + 1):
@@ -115,7 +134,6 @@ def plot_preds_iou(img, preds, truths, width=1, plot_tp=True):
     # Plot truths
     for i in range(1, int(np.max(truths)) + 1):
         m = ((truths == i) * 255).astype(np.uint8)
-        color = tuple(np.random.random(size=3))
         color = GREEN if ious.max(1)[i - 1] > 0.5 else RED
 
         contours, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)

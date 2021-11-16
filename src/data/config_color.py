@@ -1,9 +1,7 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/datasets/coco_instance.py
 
-from params import SIZE, ORIG_SIZE
-
-H, W = ORIG_SIZE
-# W = 1000
+H, W = 520, 704
+SIZE = 256
 
 img_norm_cfg = dict(mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 

@@ -26,13 +26,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--pretrained_folder",
-        type=str,
-        default=None,
-        help="Folder for pretrained weights",
-    )
-
-    parser.add_argument(
         "--lr",
         type=float,
         default=None,
@@ -53,6 +46,13 @@ def parse_args():
         help="Encoder",
     )
 
+    parser.add_argument(
+        "--use_extra_samples",
+        type=bool,
+        default=None,
+        help="Whether to use extra samples from the Livecell dataset.",
+    )
+
     args = parser.parse_args()
 
     return args
@@ -65,7 +65,7 @@ class Config:
     # General
     seed = 42
     verbose = 1
-    first_epoch_eval = 0
+    first_epoch_eval = 1
     compute_val_loss = False
     verbose_eval = 5
 
@@ -73,32 +73,34 @@ class Config:
     save_weights = True
 
     # Images
-    fix = False
-    use_mosaic = False
+    fix = True
+    extra_name = "livecell_no_shsy5y"
+    use_extra_samples = True
+    num_classes = 3
+    pretrained_livecell = True
 
-    # data_config = "data/config_mosaic.py" if use_mosaic else "data/config.py"
-    data_config = "data/config.py"
+    use_mosaic = False
+    data_config = "data/config_mosaic.py" if use_mosaic else "data/config.py"
 
     # k-fold
     k = 5
     random_state = 0
-    selected_folds = [0, 1, 2, 3, 4]
+    selected_folds = [0]  # , 1, 2, 3, 4]
 
     # Model
-    name = "maskrcnn"  # "cascade"
-    encoder = "resnet101"
+    name = "maskrcnn"  # "cascade" "maskrcnn"
+    encoder = "resnet50"
     model_config = f"model_zoo/config_{name}.py"
-
-    pretrained_folder = None
+    pretrained_livecell = True
 
     # Training
     optimizer = "Adam"
-    scheduler = "plateau" if optimizer == "SGD" else "linear"
+    scheduler = "linear"  # "plateau" "linear"
     weight_decay = 0.0005 if optimizer == "SGD" else 0
     batch_size = 4
     val_bs = batch_size
 
-    epochs = 40
+    epochs = 30
 
     lr = 3e-4
     warmup_prop = 0.05
@@ -123,8 +125,8 @@ if __name__ == "__main__":
     if args.encoder is not None:
         config.encoder = args.encoder
 
-    if args.pretrained_folder is not None:
-        config.pretrained_folder = args.pretrained_folder
+    if args.use_extra_samples is not None:
+        config.use_extra_samples = args.use_extra_samples
 
     log_folder = args.log_folder
 

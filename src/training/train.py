@@ -2,6 +2,7 @@ import gc
 import time
 import torch
 import traceback
+import numpy as np
 from tqdm.notebook import tqdm  # noqa
 
 from data.loader import define_loaders
@@ -28,6 +29,8 @@ def fit(
     first_epoch_eval=0,
     compute_val_loss=True,
     use_fp16=False,
+    num_classes=3,
+    use_extra_samples=False,
     device="cuda",
 ):
     """
@@ -67,11 +70,22 @@ def fit(
         train_dataset, val_dataset, batch_size=batch_size, val_bs=val_bs
     )
 
-    num_warmup_steps = int(warmup_prop * epochs * len(train_loader))
-    num_training_steps = int(epochs * len(train_loader))
+    if use_extra_samples:
+        extra_scheduling = [100 * (i // 5) for i in range(epochs)][::-1]
+        assert epochs == len(extra_scheduling)
+    else:
+        extra_scheduling = [0] * epochs
+
+    num_training_steps = (
+        len(train_dataset.img_paths) * epochs + np.sum(extra_scheduling)
+    ) // batch_size
+    # num_training_steps = int(epochs * len(train_loader))
+
+    num_warmup_steps = int(warmup_prop * num_training_steps)
     scheduler = define_scheduler(scheduler_name, optimizer, num_warmup_steps, num_training_steps)
 
     for epoch in range(1, epochs+1):
+        train_dataset.sample_extra_data(extra_scheduling[epoch - 1])
         model.train()
         start_time = time.time()
         optimizer.zero_grad()
@@ -127,7 +141,7 @@ def fit(
                 predict_dataset, model, batch_size=1, device=device
             )
             try:
-                iou_map, _ = evaluate_results(predict_dataset, results)
+                iou_map, _ = evaluate_results(predict_dataset, results, num_classes=num_classes)
             except Exception:
                 traceback.print_exc()
                 print()

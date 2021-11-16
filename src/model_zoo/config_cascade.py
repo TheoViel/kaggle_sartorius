@@ -1,22 +1,52 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/models/mask_rcnn_r50_fpn.py
 
-num_classes = 3
-mask_iou_threshold = 0.5
+num_classes = 3 + 7
+mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
 
-model = dict(
-    type="CascadeRCNN",
-    backbone=dict(
+pretrained_weights = {
+    "resnet50": "../input/weights/cascade_mask_rcnn_r50_fpn_mstrain_3x_coco.pth",
+    "resnet101": "../input/weights/cascade_mask_rcnn_r101_fpn_mstrain_3x_coco.pth",
+    "resnext101": "../input/weights/cascade_mask_rcnn_x101_32x4d_fpn_mstrain_3x_coco.pth",
+}
+
+backbones = dict(
+    resnet50=dict(
         type="ResNet",
         depth=50,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
+        frozen_stages=-1,  # 1
         norm_cfg=dict(type="BN", requires_grad=True),
         norm_eval=True,
         style="pytorch",
-        init_cfg=dict(type="Pretrained", checkpoint="torchvision://resnet50"),
     ),
+    resnet101=dict(
+        type="ResNet",
+        depth=101,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=-1,  # 1
+        norm_cfg=dict(type="BN", requires_grad=True),
+        norm_eval=True,
+        style="pytorch",
+    ),
+    resnext101=dict(
+        type="ResNeXt",
+        depth=101,
+        groups=32,
+        base_width=4,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=-1,  # 1
+        norm_cfg=dict(type="BN", requires_grad=True),
+        style="pytorch",
+    ),
+)
+
+model = dict(
+    type="CascadeRCNN",
+    backbone="",
     neck=dict(
         type="FPN", in_channels=[256, 512, 1024, 2048], out_channels=256, num_outs=5
     ),
@@ -27,7 +57,7 @@ model = dict(
         anchor_generator=dict(
             type="AnchorGenerator",
             scales=[8],
-            ratios=[0.25, 0.5, 1.0, 2.0, 4.0],
+            ratios=[0.5, 1.0, 2.0],
             strides=[2, 4, 8, 16, 32],
         ),
         bbox_coder=dict(
@@ -215,7 +245,7 @@ model = dict(
             min_bbox_size=0,
         ),
         rcnn=dict(
-            score_thr=0.5,
+            score_thr=0.25,
             nms=dict(type="nms", iou_threshold=mask_iou_threshold),
             max_per_img=1000,
             mask_thr_binary=-1,
