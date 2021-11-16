@@ -1,95 +1,63 @@
 import numpy as np
 
-from scipy import ndimage as ndi
-from skimage.segmentation import watershed, relabel_sequential
-from skimage.feature import peak_local_max
-from skimage import measure
 
+def post_process_preds(
+    result, thresholds_conf=0.5, thresholds_mask=0.5, remove_overlap=False, num_classes=3
+):
+    masks, boxes = [], []
 
-def remove_padding(pred, shape):
-    """
-    TODO
-    pred in format ... x H x W
+    if not isinstance(thresholds_conf, float):
+        assert len(thresholds_conf) == num_classes
+    if not isinstance(thresholds_mask, float):
+        assert len(thresholds_mask) == num_classes
 
-    Args:
-        pred ([type]): [description]
-        shape ([type]): [description]
-
-    Returns:
-        [type]: [description]
-    """
-    if pred.shape[-1] != shape[-1]:
-        padding = pred.shape[-1] - shape[-1]
-        pred = pred[..., padding // 2: - padding // 2]
-    if pred.shape[-2] != shape[-2]:
-        padding = pred.shape[-2] - shape[-2]
-        pred = pred[..., padding // 2: - padding // 2, :]
-
-    return pred
-
-
-def remove_small_components(pred_i, min_size=10, verbose=0):
-    for i in range(1, pred_i.max() + 1):
-        if (pred_i == i).sum() < min_size:
-            pred_i[pred_i == i] = 0
-            if verbose:
-                print(f'Removed component {i}')
-
-    pred_i, _, _ = relabel_sequential(pred_i)
-
-    return pred_i
-
-
-def post_process_shsy5y(pred):
-    distance = pred[2] * (1 - pred[1]) * pred[0]
-
-    coords = peak_local_max(distance, min_distance=5, labels=pred[0] > 0.5, exclude_border=False)
-
-    mask = np.zeros(distance.shape, dtype=bool)
-    mask[tuple(coords.T)] = True
-    markers, _ = ndi.label(mask)
-
-    return watershed(-distance, markers, mask=(pred[0] > 0.5).astype(int))
-
-
-def post_process_cort(pred):
-    distance = pred[0] * (1 - pred[1])  # * pred[2]
-    image = (distance > 0.5).astype(int)
-    y_pred = measure.label(image, neighbors=8, background=0)
-    props = measure.regionprops(y_pred)
-    for j in range(len(props)):
-        if props[j].area < 12:
-            y_pred[y_pred == j + 1] = 0
-    y_pred = measure.label(y_pred, neighbors=8, background=0)
-
-    mask = (pred[0] > 0.5).astype(int)
-    return watershed(pred[0], y_pred, mask=mask, watershed_line=True)
-
-
-def post_process_astro(pred):
-    distance = pred[2] * (1 - pred[1]) * pred[0]
-
-    coords = peak_local_max(distance, min_distance=20, labels=pred[0] > 0.5, exclude_border=False)
-
-    mask = np.zeros(distance.shape, dtype=bool)
-    mask[tuple(coords.T)] = True
-    markers, _ = ndi.label(mask)
-
-    return watershed(-distance, markers, mask=(pred[0] > 0.5).astype(int))
-
-
-def preds_to_instance(preds, cell_types):
-    preds_instance = []
-    for pred, cell_type in zip(preds, cell_types):
-        if cell_type == "shsy5y":
-            pred_i = post_process_shsy5y(pred)
-            pred_i = remove_small_components(pred_i, min_size=100)
-        elif cell_type == "cort":
-            pred_i = post_process_cort(pred)
-            pred_i = remove_small_components(pred_i, min_size=50)
+    # Get image type & associated thresholds
+    """ More accurate way
+    lens = []
+    for c, (boxes_c, masks_c) in enumerate(zip(result[0], result[1])):
+        if len(boxes_c):
+            thresh_conf = thresholds_conf if isinstance(thresholds_conf, float) else thresholds_conf[c]
+            thresh_mask = thresholds_mask if isinstance(thresholds_mask, float) else thresholds_mask[c]  # noqa
+            scores = boxes_c[:, -1]
+            last = np.argmax(scores < thresh_conf) if np.min(scores) < thresh_conf else len(masks_c)
+            lens.append(last)
         else:
-            pred_i = post_process_astro(pred)
-            pred_i = remove_small_components(pred_i, min_size=300)
+            lens.append(0)
+    """
 
-        preds_instance.append(pred_i)
-    return preds_instance
+    lens = [len(boxes_c) for boxes_c, masks_c in zip(result[0], result[1])][:num_classes]
+
+    cell = np.argmax(lens)
+    thresh_conf = thresholds_conf if isinstance(thresholds_conf, float) else thresholds_conf[cell]
+    thresh_mask = thresholds_mask if isinstance(thresholds_mask, float) else thresholds_mask[cell]
+
+    # Get masks & filter by confidence
+    for c, (boxes_c, masks_c) in enumerate(zip(result[0], result[1])):
+        scores = boxes_c[:, -1]
+
+        if len(scores):
+            last = np.argmax(scores < thresh_conf) if np.min(scores) < thresh_conf else len(masks_c)
+            if last > 0:
+                masks.append(np.array(masks_c[:last]) > (thresh_mask * 255))
+                boxes.append(boxes_c[:last])
+
+        if c == num_classes - 1:
+            break
+
+    if not len(masks):
+        return [], [], cell
+
+    masks = np.concatenate(masks)
+    boxes = np.concatenate(boxes)
+
+    # Remove overlap
+    if remove_overlap:  # will make computation 35s longer
+        order = np.argsort(boxes[:, -1])
+        masks = masks[order]
+        boxes = boxes[order]
+
+        for i in range(1, len(masks)):
+            others = masks[:i].max(0)
+            masks[i] *= ~others
+
+    return masks, boxes, cell

@@ -1,13 +1,16 @@
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import LambdaLR
+from transformers import get_linear_schedule_with_warmup
 
 from training.losses import SmoothCrossEntropyLoss, FocalTverskyLoss, lovasz_loss, DiceLoss
 
 
-def define_optimizer(name, params, lr=1e-3):
+def define_optimizer(name, params, lr=1e-3, weight_decay=0):
     """
     Defines the loss function associated to the name.
     Supports optimizers from torch.nn.
+    TODO
 
     Args:
         name (str): Optimizer name.
@@ -20,12 +23,48 @@ def define_optimizer(name, params, lr=1e-3):
     Returns:
         torch optimizer: Optimizer
     """
-    try:
-        optimizer = getattr(torch.optim, name)(params, lr=lr)
-    except AttributeError:
-        raise NotImplementedError
+    if name == "SGD":
+        optimizer = getattr(torch.optim, name)(
+            params, lr=lr, weight_decay=weight_decay, momentum=0.9
+        )
+    else:
+        try:
+            optimizer = getattr(torch.optim, name)(params, lr=lr, weight_decay=weight_decay)
+        except AttributeError:
+            raise NotImplementedError
 
     return optimizer
+
+
+def get_plateau_schedule_with_warmup(
+    optimizer, num_warmup_steps, num_training_steps, decay_steps=[0.5], decay=0.1, last_epoch=-1
+):
+    """
+    Linear warmup + divide lr by 10 at each decay_steps
+    """
+    def lr_lambda(current_step: int):
+        if current_step < num_warmup_steps:  # warmup
+            return float(current_step) / float(max(1, num_warmup_steps))
+
+        for i, decay_step in enumerate(decay_steps[::-1] + [0]):
+            if current_step > decay_step * num_training_steps:
+                break
+        return decay ** (len(decay_steps) - i)
+
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
+
+
+def define_scheduler(scheduler, optimizer, num_warmup_steps, num_training_steps):
+    if scheduler == "linear":
+        return get_linear_schedule_with_warmup(
+            optimizer, num_warmup_steps, num_training_steps
+        )
+    elif scheduler == "plateau":
+        return get_plateau_schedule_with_warmup(
+            optimizer, num_warmup_steps, num_training_steps, decay_steps=[0.8, 0.95]
+        )
+    else:
+        raise NotImplementedError
 
 
 class SartoriusLoss(nn.Module):

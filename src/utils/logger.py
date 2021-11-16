@@ -1,25 +1,17 @@
 import os
 import sys
 import json
+import shutil
 import datetime
-import pandas as pd
 
-from params import LOG_PATH
 
-LOGGED_IN_CONFIG = [
-    "encoder",
-    "decoder",
-    "num_classes",
-    "activation",
-    "loss",
-    "optimizer",
-    "batch_size",
-    "epochs",
-    "lr",
-    "warmup_prop",
-    "k",
-    "random_state",
-]
+class Config:
+    """
+    Placeholder to load a config from a saved json
+    """
+    def __init__(self, dic):
+        for k, v in dic.items():
+            setattr(self, k, v)
 
 
 class Logger(object):
@@ -84,40 +76,9 @@ def prepare_log_folder(log_path):
     return log_folder
 
 
-def update_history(history, metrics, epoch, loss, val_loss, time):
+def save_config(config, folder):
     """
-    Updates a training history dataframe.
-
-    Args:
-        history (pandas dataframe or None): Previous history.
-        metrics (dict): Metrics dictionary.
-        epoch (int): Epoch.
-        loss (float): Training loss.
-        val_loss (float): Validation loss.
-        time (float): Epoch duration.
-
-    Returns:
-        pandas dataframe: history
-    """
-    new_history = {
-        "epoch": [epoch],
-        "time": [time],
-        "loss": [loss],
-        "val_loss": [val_loss],
-    }
-    new_history.update(metrics)
-
-    new_history = pd.DataFrame.from_dict(new_history)
-
-    if history is not None:
-        return pd.concat([history, new_history]).reset_index(drop=True)
-    else:
-        return new_history
-
-
-def save_config(config, path):
-    """
-    Saves a config as a json and pandas dataframe
+    Saves a config as a json, copies data and model configs.
 
     Args:
         config (Config): Config.
@@ -126,40 +87,17 @@ def save_config(config, path):
     Returns:
         pandas dataframe: Config as a dataframe
     """
+    data_config_file = folder + config.data_config.split('/')[-1]
+    model_config_file = folder + config.model_config.split('/')[-1]
+
+    shutil.copyfile(config.data_config, data_config_file)
+    shutil.copyfile(config.model_config, model_config_file)
+
+    config.data_config = data_config_file
+    config.model_config_file = model_config_file
+
     dic = config.__dict__.copy()
     del dic["__doc__"], dic["__module__"], dic["__dict__"], dic["__weakref__"]
 
-    with open(path, "w") as f:
+    with open(folder + "config.json", "w") as f:
         json.dump(dic, f)
-
-
-def update_overall_logs(metrics, config_df, log_path):
-    """
-    Updates a .csv containing logs for several experiments.
-
-    Args:
-        metrics (pandas dataframe): Metrics dataframe.
-        config_df (pandas dataframe): Config as a dataframe as returned by the save_config function.
-        log_path (str): Path to save at.
-
-    Returns:
-        pandas dataframe: Updated dataframe containing logs.
-    """
-    filename = (
-        f"{LOG_PATH}logs_{config_df['mode'][0]}_{config_df['target_name'][0]}.csv"
-    )
-
-    metrics = metrics[["auc", "accuracy", "f1"]]
-    config_df = config_df[LOGGED_IN_CONFIG]
-    df = pd.concat([config_df, metrics], axis=1)
-    df["path"] = log_path
-
-    try:
-        logs = pd.read_csv(filename)
-        logs = pd.concat([logs, df], sort=False).reset_index(drop=True)
-    except FileNotFoundError:
-        logs = df
-
-    logs.to_csv(filename, index=False)
-
-    return logs

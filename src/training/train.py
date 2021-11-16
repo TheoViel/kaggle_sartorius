@@ -1,28 +1,36 @@
+import gc
 import time
 import torch
-from transformers import get_linear_schedule_with_warmup
+import traceback
+import numpy as np
+from tqdm.notebook import tqdm  # noqa
 
-from training.meter import SegmentationMeter
-from training.loader import define_loaders
-from training.optim import SartoriusLoss, define_optimizer
-from inference.predict import compute_activations
+from data.loader import define_loaders
+from training.optim import define_optimizer, define_scheduler
+from inference.predict import predict
+from utils.metrics import evaluate_results
 
 
 def fit(
     model,
     train_dataset,
     val_dataset,
-    loss_config,
-    activations={},
+    predict_dataset,
     optimizer_name="Adam",
+    scheduler_name="linear",
     epochs=50,
     batch_size=32,
     val_bs=32,
     warmup_prop=0.1,
     lr=1e-3,
+    weight_decay=0,
     verbose=1,
+    verbose_eval=5,
     first_epoch_eval=0,
-    num_classes=1,
+    compute_val_loss=True,
+    use_fp16=False,
+    num_classes=3,
+    use_extra_samples=False,
     device="cuda",
 ):
     """
@@ -50,95 +58,109 @@ def fit(
         numpy array [len(val_dataset) x num_classes]: Last prediction on the validation data.
         pandas dataframe: Training history.
     """
-    avg_val_loss = 0.0
+    dt = 0.
 
     scaler = torch.cuda.amp.GradScaler()
 
-    optimizer = define_optimizer(optimizer_name, model.parameters(), lr=lr)
-
-    loss_fct = SartoriusLoss(loss_config)
+    optimizer = define_optimizer(
+        optimizer_name, model.parameters(), lr=lr, weight_decay=weight_decay
+    )
 
     train_loader, val_loader = define_loaders(
         train_dataset, val_dataset, batch_size=batch_size, val_bs=val_bs
     )
 
-    meter = SegmentationMeter()
+    if use_extra_samples:
+        extra_scheduling = [100 * (i // 5) for i in range(epochs)][::-1]
+        assert epochs == len(extra_scheduling)
+    else:
+        extra_scheduling = [0] * epochs
 
-    num_warmup_steps = int(warmup_prop * epochs * len(train_loader))
-    num_training_steps = int(epochs * len(train_loader))
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps, num_training_steps
-    )
+    num_training_steps = (
+        len(train_dataset.img_paths) * epochs + np.sum(extra_scheduling)
+    ) // batch_size
+    # num_training_steps = int(epochs * len(train_loader))
 
-    for epoch in range(epochs):
+    num_warmup_steps = int(warmup_prop * num_training_steps)
+    scheduler = define_scheduler(scheduler_name, optimizer, num_warmup_steps, num_training_steps)
+
+    for epoch in range(1, epochs+1):
+        train_dataset.sample_extra_data(extra_scheduling[epoch - 1])
         model.train()
         start_time = time.time()
         optimizer.zero_grad()
-
         avg_loss = 0
 
         for batch in train_loader:
-            x = batch[0].to(device).float()
-            y_mask = batch[1].to(device)
-            y_cls = batch[2].to(device)
+            if use_fp16:  # TODO
+                with torch.cuda.amp.autocast():
+                    losses = model(**batch, return_loss=True)
+                    loss, _ = model.module._parse_losses(losses)
 
-            with torch.cuda.amp.autocast():
-                pred_mask, pred_cls = model(x)
+                    scaler.scale(loss).backward()
+                    avg_loss += loss.item() / len(train_loader)
 
-                loss = loss_fct(pred_mask, pred_cls, y_mask, y_cls).mean()
+                    # TODO : grad clip
+                    scaler.step(optimizer)
 
-                scaler.scale(loss).backward()
+                    scale = scaler.get_scale()
+                    scaler.update()
 
+                    if scale == scaler.get_scale():
+                        scheduler.step()
+
+            else:
+                losses = model(**batch, return_loss=True)
+                loss, _ = model.module._parse_losses(losses)
+
+                loss.backward()
                 avg_loss += loss.item() / len(train_loader)
 
-                scaler.step(optimizer)
-                scaler.update()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 10.)
 
-            scheduler.step()
+                optimizer.step()
+                scheduler.step()
+
             for param in model.parameters():
                 param.grad = None
 
         model.eval()
-        avg_val_loss = 0.
-        metrics = meter.reset()
+        avg_val_loss, iou_map = 0, 0
 
-        if epoch + 1 >= first_epoch_eval:
-            with torch.no_grad():
-                for batch in val_loader:
-                    x = batch[0].to(device).float()
-                    y_mask = batch[1].to(device)
-                    y_cls = batch[2].to(device)
+        do_eval = (epoch >= first_epoch_eval and not epoch % verbose_eval) or (epoch == epochs)
+        if do_eval:
+            if compute_val_loss:
+                with torch.no_grad():
+                    for batch in val_loader:
+                        losses = model(**batch, return_loss=True)
+                        loss, _ = model.module._parse_losses(losses)
 
-                    pred_mask, pred_cls = model(x)
+                        avg_val_loss += loss.item() / len(val_loader)
 
-                    loss = loss_fct(pred_mask.detach(), pred_cls.detach(), y_mask, y_cls).mean()
-
-                    avg_val_loss += loss / len(val_loader)
-
-                    pred_mask, pred_cls = compute_activations(pred_mask, pred_cls, activations)
-
-                    meter.update(pred_mask[:, 0], pred_cls, y_mask[:, 0] > 0, y_cls)
-
-            metrics = meter.compute()
-
-        elapsed_time = time.time() - start_time
-        if (epoch + 1) % verbose == 0:
-            elapsed_time = elapsed_time * verbose
-            lr = scheduler.get_last_lr()[0]
-            print(
-                f"Epoch {epoch + 1:02d}/{epochs:02d} \t lr={lr:.1e}\t t={elapsed_time:.0f}s\t"
-                f"loss={avg_loss:.3f}",
-                end="\t",
+            results = predict(
+                predict_dataset, model, batch_size=1, device=device
             )
-            if epoch + 1 >= first_epoch_eval:
-                print(
-                    f"val_loss={avg_val_loss:.3f} \t dice={metrics['dice']:.3f} \t"
-                    f"acc={metrics['acc']:.3f}"
-                )
-            else:
-                print("")
+            try:
+                iou_map, _ = evaluate_results(predict_dataset, results, num_classes=num_classes)
+            except Exception:
+                traceback.print_exc()
+                print()
+                pass
 
-    del (train_loader, val_loader, y_mask, loss, x, y_cls, pred_cls, pred_mask)
-    torch.cuda.empty_cache()
+        # Print infos
+        dt += time.time() - start_time
+        lr = scheduler.get_last_lr()[0]
 
-    return meter
+        string = f"Epoch {epoch:02d}/{epochs:02d} \t lr={lr:.1e}\t t={dt:.0f}s\tloss={avg_loss:.3f}"
+        string = string + f"\t avg_val_loss={avg_val_loss:.3f}" if avg_val_loss else string
+        string = string + f"\t iou_map={iou_map:.3f}" if iou_map else string
+
+        if verbose:
+            print(string)
+            dt = 0
+
+        del (loss, losses, batch)
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    return results
