@@ -75,7 +75,7 @@ class Config:
     # Images
     fix = True
     extra_name = "livecell_no_shsy5y"
-    use_extra_samples = True
+    use_extra_samples = False
     num_classes = 3
     pretrained_livecell = True
 
@@ -100,7 +100,7 @@ class Config:
     batch_size = 4
     val_bs = batch_size
 
-    epochs = 30
+    epochs = 30 if use_extra_samples else 40
 
     lr = 3e-4
     warmup_prop = 0.05

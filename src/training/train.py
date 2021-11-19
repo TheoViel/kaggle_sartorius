@@ -8,7 +8,7 @@ from tqdm.notebook import tqdm  # noqa
 from data.loader import define_loaders
 from training.optim import define_optimizer, define_scheduler
 from inference.predict import predict
-from utils.metrics import evaluate_results
+from utils.metrics import quick_eval_results
 
 
 def fit(
@@ -138,10 +138,10 @@ def fit(
                         avg_val_loss += loss.item() / len(val_loader)
 
             results = predict(
-                predict_dataset, model, batch_size=1, device=device
+                predict_dataset, model, batch_size=1, device=device, mode="val"
             )
             try:
-                iou_map, _ = evaluate_results(predict_dataset, results, num_classes=num_classes)
+                iou_map, _ = quick_eval_results(predict_dataset, results, num_classes=num_classes)
             except Exception:
                 traceback.print_exc()
                 print()

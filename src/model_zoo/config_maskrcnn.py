@@ -1,6 +1,6 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/models/mask_rcnn_r50_fpn.py
 
-num_classes = 3 + 7  # 8
+num_classes = 8  # 3 + 7 for training, 8 for pretraining
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
 

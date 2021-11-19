@@ -2,7 +2,7 @@ import skimage
 import pycocotools
 import numpy as np
 
-from inference.post_process import post_process_preds
+from inference.post_process import quick_post_process_preds
 
 
 def dice_score(pred, truth, eps=1e-8, threshold=0.5):
@@ -95,7 +95,7 @@ def precision_at(threshold, iou):
 
     Args:
         threshold (float): Threshold.
-        iou (np array): IoU matrix.
+        iou (np array [n_truths x n_preds]): IoU matrix.
 
     Returns:
         int: Number of true positives,
@@ -103,19 +103,15 @@ def precision_at(threshold, iou):
         int: Number of false negatives.
     """
     matches = iou > threshold
-    true_positives = np.sum(matches, axis=0) >= 1  # Correct objects
-    # true_positives = np.sum(matches, axis=1) == 1  # Correct objects
-    false_positives = np.sum(matches, axis=0) == 0  # Missed objects
-    false_negatives = np.sum(matches, axis=1) == 0  # Extra objects
-    tp, fp, fn = (
-        np.sum(true_positives),
-        np.sum(false_positives),
-        np.sum(false_negatives),
-    )
-    return tp, fp, fn
+    # true_positives = np.sum(matches, axis=0) >= 1  # Correct objects
+    true_positives = (np.sum(matches, axis=1) == 1).sum()  # Correct objects
+    false_negatives = (np.sum(matches, axis=1) == 0).sum()
+    false_positives = (np.sum(matches, axis=0) == 0).sum() + (np.sum(matches, axis=1) > 1).sum()
+
+    return true_positives, false_positives, false_negatives
 
 
-def iou_map(truths, preds, verbose=0, ious=None):
+def iou_map(truths=None, preds=None, ious=None, verbose=0):
     """
     Computes the metric for the competition.
     Masks contain the segmented pixels where each object has one value associated,
@@ -124,12 +120,17 @@ def iou_map(truths, preds, verbose=0, ious=None):
     Args:
         truths (list of masks): Ground truths.
         preds (list of masks): Predictions.
+        ious (list of matrices): Precomputed ious. Of size n_truths x n_preds.
         verbose (int, optional): Whether to print infos. Defaults to 0.
 
     Returns:
         float: mAP.
     """
+    if preds is None or truths is None:
+        assert ious is not None
+
     if ious is None:
+        assert truths is not None and preds is not None
         ious = [compute_iou(truth, pred) for truth, pred in zip(truths, preds)]
 
     if verbose:
@@ -159,23 +160,11 @@ def iou_map(truths, preds, verbose=0, ious=None):
     return np.mean(all_precs)
 
 
-def evaluate_results(
-    dataset,
-    results,
-    thresholds_conf=0.5,
-    thresholds_mask=0.5,
-    remove_overlap=False,
-    num_classes=3,
-    verbose=0,
-):
+def quick_eval_results(dataset, results, num_classes=3):
     precs = [[] for _ in range(num_classes)]
     for idx in range(len(dataset)):
-        masks, _, cell_type = post_process_preds(
-            results[idx],
-            thresholds_conf=thresholds_conf,
-            thresholds_mask=thresholds_mask,
-            remove_overlap=remove_overlap,
-            num_classes=num_classes,
+        masks, _, cell_type = quick_post_process_preds(
+            results[idx], num_classes=num_classes,
         )
 
         if not len(masks):
@@ -185,8 +174,22 @@ def evaluate_results(
         rle_pred = [pycocotools.mask.encode(np.asarray(p, order='F')) for p in masks]
         rle_truth = dataset.encodings[idx].tolist()
 
-        iou = pycocotools.mask.iou(rle_pred, rle_truth, [0] * len(rle_truth))
-        score = iou_map(None, None, verbose=verbose, ious=[iou])
+        iou = pycocotools.mask.iou(rle_truth, rle_pred, [0] * 100000)
+        score = iou_map(ious=[iou])
         precs[cell_type].append(score)
 
     return np.mean(np.concatenate(precs)), [np.mean(p) for p in precs if len(p)]
+
+
+def evaluate(masks_pred, dataset, cell_types):
+    scores = [[], [], []]
+
+    for masks, cell_type, rle_truth in zip(masks_pred, cell_types, dataset.encodings):
+        rle_pred = [pycocotools.mask.encode(np.asarray(p, order='F')) for p in masks]
+
+        iou = pycocotools.mask.iou(rle_truth.tolist(), rle_pred, [0] * 100000)
+        score = iou_map(ious=[iou])
+
+        scores[cell_type].append(score)
+
+    return scores

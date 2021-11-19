@@ -4,7 +4,7 @@ from tqdm.notebook import tqdm  # noqa
 from data.loader import define_loaders
 
 
-def predict(dataset, model, batch_size=16, device="cuda"):
+def predict(dataset, model, batch_size=16, device="cuda", mode="test"):
     """
     Performs inference on an image.
     TODO
@@ -24,7 +24,11 @@ def predict(dataset, model, batch_size=16, device="cuda"):
     model.eval()
     with torch.no_grad():
         for batch in loader:
-            results = model(**batch, return_loss=False, rescale=True)
-            all_results += results
+            if mode == "test":
+                boxes, masks = model(**batch, return_loss=False, rescale=True)
+                all_results.append((boxes.cpu().numpy(), masks.cpu().numpy()))
+            else:
+                results = model(**batch, return_loss=False, rescale=True)
+                all_results += results
 
     return all_results

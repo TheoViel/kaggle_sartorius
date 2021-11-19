@@ -40,14 +40,18 @@ def merge_aug_proposals(aug_proposals, img_metas, cfg):
     aug_proposals = torch.cat(recovered_proposals, dim=0)
     merged_proposals, _ = nms(
         aug_proposals[:, :4].contiguous(),
-        aug_proposals[:, -1].contiguous(),
+        aug_proposals[:, 4].contiguous(),
         cfg.nms.iou_threshold,
     )
 
     # Reorder
     scores = merged_proposals[:, 4]
-    _, order = scores.sort(0, descending=True)
+
+    scores, order = scores.sort(0, descending=True)
+
+    order = order[scores > cfg.score_thr]
     order = order[:cfg.max_per_img]
+
     merged_proposals = merged_proposals[order, :]
 
     return merged_proposals

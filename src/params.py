@@ -24,3 +24,5 @@ ORIG_SIZE = (520, 704)
 LIVECELL_PATH = DATA_PATH + "LIVECell_dataset_2021/images/"
 LIVECELL_CLASSES = ['skbr3', 'a172', 'huh7', 'bv2', 'mcf7', 'bt474', 'skov3', 'shsy5y']
 LIVECELL_FOLDERS = ['SkBr3', 'A172', 'Huh7', 'BV2', 'MCF7', 'BT474', 'SKOV3', 'SHSY5Y']
+
+MAX_CELLS_PER_IMG = [800, 600, 150]

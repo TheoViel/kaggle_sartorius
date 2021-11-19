@@ -1,9 +1,10 @@
 # https://github.com/boliu61/open-images-2019-instance-segmentation/blob/52a7ec2c254deb7b702aa7a085855e31a5254624/mmdetection/mmdet/models/detectors/ensemble_model.py#L7
 
 import mmcv
+import torch
 from torch import nn
-from mmdet.core import bbox2result, bbox_mapping
-from mmdet.core import bbox2roi, merge_aug_masks, multiclass_nms  # noqa
+from mmdet.core import bbox_mapping
+from mmdet.core import bbox2roi, merge_aug_masks
 from mmdet.models.detectors import BaseDetector
 
 from model_zoo.merging import merge_aug_proposals, merge_aug_bboxes, single_class_boxes_nms
@@ -26,14 +27,18 @@ for model, features in zip(self.models, all_features):
 
 
 class EnsembleModel(BaseDetector):
-    def __init__(self, models):
+    def __init__(self, models, use_tta=False):
         super().__init__()
         self.models = nn.ModuleList([model.module for model in models])
+        self.n_models = len(self.models) * 4 if use_tta else len(self.models)
+
+        self.use_tta_prosals = False
 
         self.rpn_cfg = mmcv.Config(
             dict(
+                score_thr=0.,
                 max_per_img=None,
-                nms=dict(type="nms", iou_threshold=0.7),
+                nms=dict(type="nms", iou_threshold=0.7),   # adjust depending on len(models)
                 min_bbox_size=0,
             )
         )
@@ -41,7 +46,7 @@ class EnsembleModel(BaseDetector):
             dict(
                 score_thr=0.2,
                 nms=dict(type="nms", iou_threshold=0.7),
-                max_per_img=1000,
+                max_per_img=None,
                 mask_thr_binary=-1,
             )
         )
@@ -50,11 +55,17 @@ class EnsembleModel(BaseDetector):
         self.update_model_configs()
 
     def update_model_configs(self):
+        nms_pre = 1000 if (self.n_models > 4 and self.use_tta_prosals) else 2000
+        max_per_img = 500 if (self.n_models > 4 and self.use_tta_prosals) else 1000
+
+        nms_pre = 2000
+        max_per_img = 1000
+
         for model in self.models:
             model.rpn_head.test_cfg = mmcv.Config(
                 dict(
-                    nms_pre=2000,
-                    max_per_img=1000,
+                    nms_pre=nms_pre,
+                    max_per_img=max_per_img,
                     nms=dict(type="nms", iou_threshold=0.7),
                     min_bbox_size=0,
                 )
@@ -71,6 +82,18 @@ class EnsembleModel(BaseDetector):
         return self.aug_test(img, img_metas, **kwargs)
 
     def get_proposals(self, imgs, img_metas):
+        """
+        TODO
+        No TTAs are used.
+        TTAs can be used but nms_pre and max_per_img need to be lowered.
+
+        Args:
+            imgs ([type]): [description]
+            img_metas ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
         imgs_per_gpu = len(img_metas[0])
         aug_proposals = [[] for _ in range(imgs_per_gpu)]
         aug_img_metas = [[] for _ in range(imgs_per_gpu)]
@@ -84,6 +107,9 @@ class EnsembleModel(BaseDetector):
                     aug_proposals[i].append(proposals)
                     aug_img_metas[i] += img_meta
 
+                if not self.use_tta_prosals:
+                    break
+
         proposal_list = [
             merge_aug_proposals(proposals, img_meta, self.rpn_cfg)
             for proposals, img_meta in zip(aug_proposals, aug_img_metas)
@@ -94,7 +120,8 @@ class EnsembleModel(BaseDetector):
     def get_bboxes(self, imgs, img_metas, proposal_list):
         """
         https://github.com/open-mmlab/mmdetection/blob/bde7b4b7eea9dd6ee91a486c6996b2d68662366d/mmdet/models/roi_heads/test_mixins.py#L139
-        TODo
+        TODO
+        All TTAs are used.
 
         Args:
             imgs ([type]): [description]
@@ -145,21 +172,18 @@ class EnsembleModel(BaseDetector):
             iou_threshold=self.rcnn_cfg.nms.iou_threshold,
         )
 
-        # det_bboxes, det_labels = multiclass_nms(
-        #     merged_bboxes,
-        #     merged_scores,
-        #     self.rcnn_cfg.score_thr,
-        #     self.rcnn_cfg.nms,
-        #     self.rcnn_cfg.max_per_img,
-        # )
+        det_bboxes = torch.cat([det_bboxes, det_labels.unsqueeze(-1)], -1)
 
-        bbox_result = bbox2result(det_bboxes, det_labels, self.num_classes)
+        det_bboxes = det_bboxes[det_bboxes[:, 4] > self.rcnn_cfg.score_thr]
 
-        return bbox_result, det_bboxes, det_labels, merged_bboxes, aug_bboxes
+        return det_bboxes, merged_bboxes, aug_bboxes
 
     def get_masks(self, imgs, img_metas, det_bboxes, det_labels):
         """
         https://github.com/open-mmlab/mmdetection/blob/bde7b4b7eea9dd6ee91a486c6996b2d68662366d/mmdet/models/roi_heads/test_mixins.py#L282
+        TODO
+
+        Only hflip TTA is used.
 
         Args:
             imgs ([type]): [description]
@@ -173,7 +197,7 @@ class EnsembleModel(BaseDetector):
         aug_masks, aug_img_metas = [], []
 
         for model in self.models:
-            for x, img_meta in zip(model.extract_feats(imgs), img_metas):
+            for x, img_meta in zip(model.extract_feats(imgs[:2]), img_metas[:2]):
                 img_shape = img_meta[0]["img_shape"]
                 scale_factor = img_meta[0]["scale_factor"]
                 flip = img_meta[0]["flip"]
@@ -191,7 +215,8 @@ class EnsembleModel(BaseDetector):
         merged_masks = merge_aug_masks(aug_masks, aug_img_metas, None)
 
         ori_shape = img_metas[0][0]["ori_shape"]
-        segm_result = self.models[0].roi_head.mask_head.get_seg_masks(
+
+        masks = self.models[0].roi_head.mask_head.get_seg_masks(
             merged_masks,
             det_bboxes,
             det_labels,
@@ -199,9 +224,10 @@ class EnsembleModel(BaseDetector):
             ori_shape,
             scale_factor=det_bboxes.new_ones(4),
             rescale=False,
+            return_per_class=False,
         )
 
-        return segm_result, merged_masks, aug_masks
+        return masks, merged_masks, aug_masks
 
     def aug_test(self, imgs, img_metas, return_everything=False, **kwargs):
         """
@@ -211,32 +237,29 @@ class EnsembleModel(BaseDetector):
 
         proposal_list, aug_proposals = self.get_proposals(imgs, img_metas)
 
-        bbox_result, det_bboxes, det_labels, merged_bboxes, aug_bboxes = self.get_bboxes(
+        bboxes, merged_bboxes, aug_bboxes = self.get_bboxes(
             imgs, img_metas, proposal_list
         )
 
         assert self.models[0].with_mask
 
-        if det_bboxes.shape[0] == 0:
-            segm_result = [[] for _ in range(self.num_classes - 1)]
-            return bbox_result, segm_result
+        if bboxes.shape[0] == 0:
+            return bboxes, None
 
-        segm_result, merged_masks, aug_masks = self.get_masks(
-            imgs, img_metas, det_bboxes, det_labels
+        masks, merged_masks, aug_masks = self.get_masks(
+            imgs, img_metas, bboxes[:, :5], bboxes[:, -1].long()
         )
 
         if return_everything:
-            return [[bbox_result, segm_result]], (
+            return (bboxes, masks), (
                 proposal_list,
                 aug_proposals,
-                bbox_result,
-                det_bboxes,
-                det_labels,
+                bboxes,
                 merged_bboxes,
                 aug_bboxes,
-                segm_result,
+                masks,
                 merged_masks,
                 aug_masks,
             )
 
-        return [[bbox_result, segm_result]]
+        return (bboxes, masks)
