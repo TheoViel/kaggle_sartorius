@@ -17,6 +17,7 @@ RESULTS_PH = {
     'img_fields': ["img"],
     'bbox_fields': ["gt_bboxes"],
     'mask_fields': ["gt_masks"],
+    'seg_fields': ['gt_semantic_seg'],
     # 'img_prefix': None,
     # 'img_info': {
     #     'filename': ""
@@ -108,6 +109,7 @@ class SartoriusDataset(Dataset):
             "gt_bboxes": boxes,
             "gt_labels": class_labels,
             "gt_masks": masks,
+            'gt_semantic_seg': masks.masks.max(0),
             "img_shape": image.shape[:2],
             "ori_shape": image.shape[:2],
             "filename": path,
@@ -123,6 +125,11 @@ class SartoriusDataset(Dataset):
             except KeyError:
                 results['scale_factor'] = 1.
                 results_transfo = self.transforms(results.copy())
+
+        # try:
+        #     results_transfo['gt_semantic_seg'] = results_transfo['gt_masks'].masks.max(0)
+        # except AttributeError:
+        #     results_transfo['gt_semantic_seg'] = results_transfo['gt_masks'].data.masks.max(0)
 
         return results_transfo
 

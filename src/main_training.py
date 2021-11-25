@@ -5,6 +5,25 @@ import warnings
 from training.main import k_fold
 from utils.logger import create_logger, save_config
 
+BATCH_SIZES = {
+    "maskrcnn": {
+        "resnet50": 4,
+        "resnet101": 4,
+        "resnext101": 4,
+    },
+    "cascade": {
+        "resnet50": 4,
+        "resnext101": 3,
+        "swin_tiny": 4,
+        "swin_small": 3,
+        "swin_base": 2,
+    },
+    "htc": {
+        "resnet50": 3,
+        "resnext101": 2,
+    },
+}
+
 
 def parse_args():
     """
@@ -62,12 +81,13 @@ class Config:
     """
     Parameters used for training
     """
+
     # General
     seed = 42
     verbose = 1
-    first_epoch_eval = 1
+    first_epoch_eval = 10
     compute_val_loss = False
-    verbose_eval = 5
+    verbose_eval = 10
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     save_weights = True
@@ -75,7 +95,7 @@ class Config:
     # Images
     fix = True
     extra_name = "livecell_no_shsy5y"
-    use_extra_samples = True
+    use_extra_samples = False
     num_classes = 3
     pretrained_livecell = True
 
@@ -85,22 +105,25 @@ class Config:
     # k-fold
     k = 5
     random_state = 0
-    selected_folds = [0]  # , 1, 2, 3, 4]
+    selected_folds = [0]
 
     # Model
-    name = "maskrcnn"  # "cascade" "maskrcnn"
-    encoder = "resnet50"
+    name = "htc"  # "cascade" "maskrcnn"
+    encoder = "resnext101"
     model_config = f"model_zoo/config_{name}.py"
     pretrained_livecell = True
 
+    if name == "htc":
+        data_config = "data/config_semantic.py"
+
     # Training
-    optimizer = "Adam"
+    optimizer = "Adam"  # todo : adamw
     scheduler = "linear"  # "plateau" "linear"
     weight_decay = 0.0005 if optimizer == "SGD" else 0
-    batch_size = 4
+    batch_size = BATCH_SIZES[name][encoder]
     val_bs = batch_size
 
-    epochs = 30
+    epochs = 10 * batch_size
 
     lr = 3e-4
     warmup_prop = 0.05

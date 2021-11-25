@@ -3,6 +3,7 @@ import sys
 import json
 import shutil
 import datetime
+import numpy as np
 
 
 class Config:
@@ -65,13 +66,15 @@ def prepare_log_folder(log_path):
     if not os.path.exists(log_today):
         os.mkdir(log_today)
 
-    exp_id = len(os.listdir(log_today))
+    exp_id = (
+        np.max([int(f) for f in os.listdir(log_today)]) + 1
+        if len(os.listdir(log_today))
+        else 0
+    )
     log_folder = log_today + f"{exp_id}/"
 
-    if not os.path.exists(log_folder):
-        os.mkdir(log_folder)
-    else:
-        print("Experiment already exists")
+    assert not os.path.exists(log_folder), "Experiment already exists"
+    os.mkdir(log_folder)
 
     return log_folder
 
@@ -90,8 +93,12 @@ def save_config(config, folder):
     data_config_file = folder + config.data_config.split('/')[-1]
     model_config_file = folder + config.model_config.split('/')[-1]
 
+    backbone_config_file_old = config.model_config.rsplit('/', 1)[0] + "/config_backbones.py"
+    backbone_config_file = folder + "config_backbones.py"
+
     shutil.copyfile(config.data_config, data_config_file)
     shutil.copyfile(config.model_config, model_config_file)
+    shutil.copyfile(backbone_config_file_old, backbone_config_file)
 
     config.data_config = data_config_file
     config.model_config_file = model_config_file

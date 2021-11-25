@@ -3,46 +3,25 @@
 num_classes = 3 + 7
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
+rpn_thresholds = (0.75, 0.5, 0.5)  # (0.7, 0.3, 0.3)
 
 pretrained_weights = {
     "resnet50": "../input/weights/cascade_mask_rcnn_r50_fpn_mstrain_3x_coco.pth",
     "resnet101": "../input/weights/cascade_mask_rcnn_r101_fpn_mstrain_3x_coco.pth",
     "resnext101": "../input/weights/cascade_mask_rcnn_x101_32x4d_fpn_mstrain_3x_coco.pth",
+    "swin_tiny": "../input/weights/cascade_mask_rcnn_swin_tiny_patch4_window7.pth",
+    "swin_small": "../input/weights/cascade_mask_rcnn_swin_small_patch4_window7.pth",
+    "swin_base": "../input/weights/cascade_mask_rcnn_swin_base_patch4_window7.pth",
 }
 
-backbones = dict(
-    resnet50=dict(
-        type="ResNet",
-        depth=50,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=-1,  # 1
-        norm_cfg=dict(type="BN", requires_grad=True),
-        norm_eval=True,
-        style="pytorch",
-    ),
-    resnet101=dict(
-        type="ResNet",
-        depth=101,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=-1,  # 1
-        norm_cfg=dict(type="BN", requires_grad=True),
-        norm_eval=True,
-        style="pytorch",
-    ),
-    resnext101=dict(
-        type="ResNeXt",
-        depth=101,
-        groups=32,
-        base_width=4,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=-1,  # 1
-        norm_cfg=dict(type="BN", requires_grad=True),
-        style="pytorch",
-    ),
-)
+pretrained_weights_livecell = {
+    "resnet50": "../logs/pretrain/2021-11-21/1/cascade_resnet50_0.pt",
+    "resnext101": "../logs/pretrain/2021-11-21/0/cascade_resnext101_0.pt",
+    "swin_tiny": pretrained_weights["swin_tiny"],  # TODO
+    "swin_small": pretrained_weights["swin_small"],  # TODO
+    "swin_base": pretrained_weights["swin_base"],  # TODO
+}
+
 
 model = dict(
     type="CascadeRCNN",
@@ -84,7 +63,7 @@ model = dict(
                 in_channels=256,
                 fc_out_channels=1024,
                 roi_feat_size=7,
-                num_classes=80,
+                num_classes=num_classes,
                 bbox_coder=dict(
                     type="DeltaXYWHBBoxCoder",
                     target_means=[0.0, 0.0, 0.0, 0.0],
@@ -101,7 +80,7 @@ model = dict(
                 in_channels=256,
                 fc_out_channels=1024,
                 roi_feat_size=7,
-                num_classes=80,
+                num_classes=num_classes,
                 bbox_coder=dict(
                     type="DeltaXYWHBBoxCoder",
                     target_means=[0.0, 0.0, 0.0, 0.0],
@@ -118,7 +97,7 @@ model = dict(
                 in_channels=256,
                 fc_out_channels=1024,
                 roi_feat_size=7,
-                num_classes=80,
+                num_classes=num_classes,
                 bbox_coder=dict(
                     type="DeltaXYWHBBoxCoder",
                     target_means=[0.0, 0.0, 0.0, 0.0],
@@ -142,7 +121,7 @@ model = dict(
             num_convs=4,
             in_channels=256,
             conv_out_channels=256,
-            num_classes=80,
+            num_classes=num_classes,
             loss_mask=dict(type="CrossEntropyLoss", use_mask=True, loss_weight=1.0),
         ),
     ),
@@ -151,9 +130,9 @@ model = dict(
         rpn=dict(
             assigner=dict(
                 type="MaxIoUAssigner",
-                pos_iou_thr=0.7,
-                neg_iou_thr=0.3,
-                min_pos_iou=0.3,
+                pos_iou_thr=rpn_thresholds[0],
+                neg_iou_thr=rpn_thresholds[1],
+                min_pos_iou=rpn_thresholds[2],
                 match_low_quality=True,
                 ignore_iof_thr=-1,
             ),
