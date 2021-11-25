@@ -37,12 +37,22 @@ def inference_val(df, configs, weights, use_tta=False):
             df_val, transforms=pipelines['test_tta'] if use_tta else pipelines['test']
         )
 
-        models_trained = []
+        models_trained, names = [], []
         for model_idx, model in enumerate(models):
-            assert weights[model_idx][i].endswith(f'_{i}.pt'), "Wrong model weights"
-            models_trained.append(load_model_weights(model, weights[model_idx][i]))
+            weight = weights[model_idx][i]
+            assert weight.endswith(f'_{i}.pt'), "Wrong model weights"
+            models_trained.append(load_model_weights(model, weight))
+            names.append(weight.split('/')[-1])
 
-        model = MMDataParallel(EnsembleModel(models_trained, use_tta=use_tta))
+        model = MMDataParallel(
+            EnsembleModel(
+                models_trained,
+                use_tta=use_tta,
+                names=names,
+                use_tta_proposals=False,
+                single_fold_proposals=False
+            )
+        )
 
         results = predict(dataset, model, batch_size=1, device=config.device)
         all_results.append(results)
@@ -70,12 +80,22 @@ def inference_single(df, configs, weights, idx=0, use_tta=False):
         df_val = df.iloc[val_idx].copy().reset_index(drop=True)
         df = df_val.head(idx + 1).tail(1).reset_index(drop=True)
 
-        models_trained = []
+        models_trained, names = [], []
         for model_idx, model in enumerate(models):
-            assert weights[model_idx][i].endswith(f'_{i}.pt'), "Wrong model weights"
-            models_trained.append(load_model_weights(model, weights[model_idx][i]))
+            weight = weights[model_idx][i]
+            assert weight.endswith(f'_{i}.pt'), "Wrong model weights"
+            models_trained.append(load_model_weights(model, weight))
+            names.append(weight.split('/')[-1])
 
-        model = MMDataParallel(EnsembleModel(models_trained, use_tta=use_tta))
+        model = MMDataParallel(
+            EnsembleModel(
+                models_trained,
+                use_tta=use_tta,
+                names=names,
+                use_tta_proposals=False,
+                single_fold_proposals=False
+            )
+        )
 
         dataset = SartoriusDataset(
             df,

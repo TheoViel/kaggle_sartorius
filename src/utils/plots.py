@@ -49,6 +49,8 @@ def plot_sample(img, mask=None, boxes=[], width=1, plotly=False):
 
     if isinstance(mask, BitmapMasks):
         mask = mask.masks.astype(int)
+
+    if np.max(mask) == 1:
         for i in range(len(mask)):
             mask[i] *= (i + 1)
 
@@ -101,6 +103,18 @@ def plot_preds_iou(img, preds, truths, boxes=None, boxes_2=None, width=1, plot_t
     if len(img.shape) == 2:
         img = np.stack([img, img, img], -1)
 
+    if len(preds.shape) == 3:
+        if preds.max() == 1:
+            for i in range(len(preds)):
+                preds[i] *= (i + 1)
+        preds = preds.max(0)
+
+    if len(truths.shape) == 3:
+        if truths.max() == 1:
+            for i in range(len(truths)):
+                truths[i] *= (i + 1)
+        truths = truths.max(0)
+
     preds, _, _ = skimage.segmentation.relabel_sequential(preds)
     truths, _, _ = skimage.segmentation.relabel_sequential(truths)
     ious = compute_iou(truths, preds)
@@ -108,18 +122,6 @@ def plot_preds_iou(img, preds, truths, boxes=None, boxes_2=None, width=1, plot_t
     centers_pred = get_centers(preds)
 
     img_ = img.copy()
-
-    # Add boxes
-    if boxes is not None:
-        for box in boxes:
-            color = (0.5, 0, 0, 0.5)
-            img_ = cv2.rectangle(img_, (box[0], box[1]), (box[2], box[3]), color=color, thickness=1)
-
-    # Add boxes
-    if boxes_2 is not None:
-        for box in boxes_2:
-            color = (0., 0, 0.5, 0.5)
-            img_ = cv2.rectangle(img_, (box[0], box[1]), (box[2], box[3]), color=color, thickness=1)
 
     # Plot preds
     for i in range(1, int(np.max(preds)) + 1):
@@ -138,6 +140,18 @@ def plot_preds_iou(img, preds, truths, boxes=None, boxes_2=None, width=1, plot_t
 
         contours, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
         cv2.polylines(img_, contours, True, color, width)
+
+    # Add boxes
+    if boxes is not None:
+        for box in boxes:
+            color = (0.5, 0, 0, 0.5)
+            img_ = cv2.rectangle(img_, (box[0], box[1]), (box[2], box[3]), color=color, thickness=1)
+
+    # Add boxes
+    if boxes_2 is not None:
+        for box in boxes_2:
+            color = (0., 0, 0.5, 0.5)
+            img_ = cv2.rectangle(img_, (box[0], box[1]), (box[2], box[3]), color=color, thickness=1)
 
     fig = px.imshow(img_)
 

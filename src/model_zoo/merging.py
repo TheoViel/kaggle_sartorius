@@ -94,21 +94,16 @@ def merge_aug_bboxes(aug_bboxes, aug_scores, img_metas, rcnn_test_cfg):
 
 
 def single_class_boxes_nms(merged_bboxes, merged_scores, iou_threshold=0.5):
-    # Remove background class
-    merged_scores = merged_scores[:, :-1]
-
     # Use most confident class per candidate
     det_scores, det_labels = torch.max(merged_scores, 1)
-    merged_bboxes = merged_bboxes.view(merged_bboxes.size(0), -1, 4)
-    det_bboxes = torch.stack([merged_bboxes[i, c] for i, c in enumerate(det_labels)])
 
-    # Get class
+    # Get class & corresponding iou threshold
     cell_type = torch.mode(det_labels, 0).values.item()
+    thresh = iou_threshold if isinstance(iou_threshold, (float, int)) else iou_threshold[cell_type]
 
     # Filter with NMS
-    thresh = iou_threshold if isinstance(iou_threshold, (float, int)) else iou_threshold[cell_type]
     det_bboxes, inds = nms(
-        det_bboxes.contiguous(), det_scores.contiguous(), thresh
+        merged_bboxes.contiguous(), det_scores.contiguous(), thresh
     )
 
     return det_bboxes, det_labels[inds]

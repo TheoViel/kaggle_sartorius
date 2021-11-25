@@ -1,6 +1,6 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/models/mask_rcnn_r50_fpn.py
 
-num_classes = 8  # 3 + 7 for training, 8 for pretraining
+num_classes = 10  # 3 + 7 for training, 8 for pretraining
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
 
@@ -14,40 +14,6 @@ pretrained_weights_livecell = {
     "resnet50": "../logs/pretrain/2021-11-12/0/maskrcnn_resnet50_0.pt",
     "resnext101": "../logs/pretrain/2021-11-14/2/maskrcnn_resnext101_0.pt",
 }
-
-backbones = dict(
-    resnet50=dict(
-        type="ResNet",
-        depth=50,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=-1,  # 1
-        norm_cfg=dict(type="BN", requires_grad=True),
-        norm_eval=True,
-        style="pytorch",
-    ),
-    resnet101=dict(
-        type="ResNet",
-        depth=101,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=-1,  # 1
-        norm_cfg=dict(type="BN", requires_grad=True),
-        norm_eval=True,
-        style="pytorch",
-    ),
-    resnext101=dict(
-        type="ResNeXt",
-        depth=101,
-        groups=32,
-        base_width=4,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=-1,  # 1
-        norm_cfg=dict(type="BN", requires_grad=True),
-        style="pytorch",
-    ),
-)
 
 
 model = dict(

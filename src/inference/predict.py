@@ -1,5 +1,4 @@
 import torch
-from tqdm.notebook import tqdm  # noqa
 
 from data.loader import define_loaders
 

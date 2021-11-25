@@ -182,7 +182,8 @@ def quick_eval_results(dataset, results, num_classes=3):
 
 
 def evaluate(masks_pred, dataset, cell_types):
-    scores = [[], [], []]
+    scores = []
+    scores_per_class = [[], [], []]
 
     for masks, cell_type, rle_truth in zip(masks_pred, cell_types, dataset.encodings):
         rle_pred = [pycocotools.mask.encode(np.asarray(p, order='F')) for p in masks]
@@ -190,6 +191,7 @@ def evaluate(masks_pred, dataset, cell_types):
         iou = pycocotools.mask.iou(rle_truth.tolist(), rle_pred, [0] * 100000)
         score = iou_map(ious=[iou])
 
-        scores[cell_type].append(score)
+        scores_per_class[cell_type].append(score)
+        scores.append(score)
 
-    return scores
+    return scores, scores_per_class
