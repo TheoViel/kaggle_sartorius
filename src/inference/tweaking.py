@@ -19,7 +19,7 @@ def evaluate_at_confidences(masks, boxes, confidences, rle_truth):
 
     rle_pred = [pycocotools.mask.encode(np.asarray(p, order='F')) for p in masks]
 
-    iou = pycocotools.mask.iou(rle_truth.tolist(), rle_pred, [0] * 100000)
+    iou = pycocotools.mask.iou(rle_truth.tolist(), rle_pred, [0] * len(rle_pred))
 
     scores = [iou_map(ious=[iou[:, :last]]) for last in lasts]
 
