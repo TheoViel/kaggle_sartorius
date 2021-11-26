@@ -82,16 +82,12 @@ def load_pretrained_weights(model, weights, verbose=0, adapt_swin=False):
     else:
         incompatible_keys = model.module.load_state_dict(dic, strict=False)
 
-    if adapt_swin:  # roi_head is changed as well
-        for k in incompatible_keys.missing_keys:
-            assert (
-                "fc_cls" in k or "fc_reg" in k or "conv_logits" in k or "roi_head" in k
-            ), f"Missing key in dict: {k}"
-    else:
-        for k in incompatible_keys.missing_keys:
-            assert (
-                "fc_cls" in k or "fc_reg" in k or "conv_logits" in k
-            ), f"Missing key in dict: {k}"
+    allowed_missing = ["fc_cls", "fc_reg", "conv_logits", "mask_iou_head"]
+    if adapt_swin:
+        allowed_missing += ["roi_head"]
+
+    for k in incompatible_keys.missing_keys:
+        assert any([allowed in k for allowed in allowed_missing]), f"Missing key in dict: {k}"
 
     return model
 
