@@ -7,6 +7,7 @@ from mmdet.core import bbox_mapping
 from mmdet.core import bbox2roi, merge_aug_masks
 from mmdet.models.detectors import BaseDetector
 
+from model_zoo.wrappers import get_wrappers
 from model_zoo.merging import (
     merge_aug_proposals,
     merge_aug_bboxes,
@@ -27,8 +28,10 @@ class EnsembleModel(BaseDetector):
         self.models = nn.ModuleList([model.module for model in models])
         self.names = names
 
+        self.wrappers = get_wrappers(self.names)
+
         self.num_classes = 3
-        self.bbox_iou_threshold = 0.7
+        self.bbox_iou_threshold = 0.75
 
         self.use_tta_proposals = use_tta_proposals
         self.single_fold_proposals = single_fold_proposals
@@ -62,11 +65,15 @@ class EnsembleModel(BaseDetector):
         )
         n_fwd = n_models + 3 * n_models * self.use_tta_proposals
 
-        nms_pre = 1000 if n_fwd > 5 else 2000
-        max_per_img = 500 if n_fwd > 5 else 1000
-
-        # nms_pre = 1500
-        # max_per_img = 750
+        if n_fwd == 1:
+            nms_pre = 2000
+            max_per_img = 1000
+        elif n_fwd <= 5:
+            nms_pre = 1500
+            max_per_img = 750
+        else:
+            nms_pre = 1000
+            max_per_img = 500
 
         for model in self.models:
             model.rpn_head.test_cfg = mmcv.Config(
@@ -129,65 +136,6 @@ class EnsembleModel(BaseDetector):
 
         return proposal_list, aug_proposals
 
-    @staticmethod
-    def get_boxes_rcnn(model, x, rois, img_shape, scale_factor, num_classes):
-        bbox_results = model.roi_head._bbox_forward(x, rois)
-        bboxes, scores = model.roi_head.bbox_head.get_bboxes(
-            rois,
-            bbox_results["cls_score"],
-            bbox_results["bbox_pred"],
-            img_shape,
-            scale_factor,
-            rescale=False,
-            cfg=None,
-        )
-
-        # Keep only desired classes
-        scores = scores[:, :num_classes]
-
-        # Keep box corresponding to most confident class
-        _, det_labels = torch.max(scores, 1)
-
-        bboxes = bboxes.view(bboxes.size(0), -1, 4)
-        bboxes = torch.stack([bboxes[i, c] for i, c in enumerate(det_labels)])
-
-        return bboxes, scores
-
-    @staticmethod
-    def get_boxes_cascade(model, x, rois, img_shape, scale_factor, img_meta, num_classes):
-        # https://github.com/open-mmlab/mmdetection/blob/bde7b4b7eea9dd6ee91a486c6996b2d68662366d/mmdet/models/roi_heads/test_mixins.py#L139
-
-        ms_scores = []
-        for i in range(model.roi_head.num_stages):
-            bbox_results = model.roi_head._bbox_forward(i, x, rois)
-            ms_scores.append(bbox_results["cls_score"])
-
-            if i < model.roi_head.num_stages - 1:
-                cls_score = bbox_results["cls_score"]
-                if model.roi_head.bbox_head[i].custom_activation:
-                    cls_score = model.roi_head.bbox_head[i].loss_cls.get_activation(
-                        cls_score
-                    )
-                bbox_label = cls_score[:, :-1].argmax(dim=1)
-                rois = model.roi_head.bbox_head[i].regress_by_class(
-                    rois, bbox_label, bbox_results["bbox_pred"], img_meta[0]
-                )
-
-        cls_score = sum(ms_scores) / float(len(ms_scores))
-        bboxes, scores = model.roi_head.bbox_head[-1].get_bboxes(
-            rois,
-            cls_score,
-            bbox_results["bbox_pred"],
-            img_shape,
-            scale_factor,
-            rescale=False,
-            cfg=None,
-        )
-
-        scores = scores[:, :num_classes]
-
-        return bboxes, scores
-
     def get_bboxes(self, imgs, img_metas, proposal_list):
         """
         https://github.com/open-mmlab/mmdetection/blob/bde7b4b7eea9dd6ee91a486c6996b2d68662366d/mmdet/models/roi_heads/test_mixins.py#L139
@@ -204,7 +152,7 @@ class EnsembleModel(BaseDetector):
         """
         aug_bboxes, aug_scores, aug_img_metas = [], [], []
 
-        for name, model in zip(self.names, self.models):
+        for wrapper, model in zip(self.wrappers, self.models):
             for x, img_meta in zip(model.extract_feats(imgs), img_metas):
                 img_shape = img_meta[0]["img_shape"]
                 scale_factor = img_meta[0]["scale_factor"]
@@ -220,17 +168,9 @@ class EnsembleModel(BaseDetector):
                 )
                 rois = bbox2roi([proposals])
 
-                # Mask RCNN
-                if "cascade" in name:
-                    bboxes, scores = self.get_boxes_cascade(
-                        model, x, rois, img_shape, scale_factor, img_meta, self.num_classes
-                    )
-                elif "rcnn" in name:
-                    bboxes, scores = self.get_boxes_rcnn(
-                        model, x, rois, img_shape, scale_factor, self.num_classes
-                    )
-                else:
-                    raise NotImplementedError
+                bboxes, scores = wrapper.get_boxes(
+                    model, x, rois, img_shape, scale_factor, img_meta, self.num_classes
+                )
 
                 aug_bboxes.append(bboxes)
                 aug_scores.append(scores)
@@ -270,7 +210,7 @@ class EnsembleModel(BaseDetector):
         """
         aug_masks, aug_img_metas = [], []
 
-        for name, model in zip(self.names, self.models):
+        for wrapper, model in zip(self.wrappers, self.models):
             for x, img_meta in zip(model.extract_feats(imgs[:2]), img_metas[:2]):
                 img_shape = img_meta[0]["img_shape"]
                 scale_factor = img_meta[0]["scale_factor"]
@@ -282,30 +222,16 @@ class EnsembleModel(BaseDetector):
                 )
                 mask_rois = bbox2roi([_bboxes])
 
-                if "cascade" in name:
-                    masks = []
-                    for i in range(model.roi_head.num_stages):
-                        mask = model.roi_head._mask_forward(i, x, mask_rois)['mask_pred']
-                        mask = mask.sigmoid()[:, :self.num_classes]
-                        masks.append(mask)
-                    mask = torch.stack(masks)
-                    mask = mask.mean(0).cpu().numpy()
+                masks = wrapper.get_masks(model, x, mask_rois, self.num_classes)
 
-                elif "rcnn" in name:
-                    mask = model.roi_head._mask_forward(x, mask_rois)['mask_pred']
-                    mask = mask.sigmoid().cpu().numpy()[:, :self.num_classes]
-
-                else:
-                    raise NotImplementedError
-
-                aug_masks.append(mask)
+                aug_masks.append(masks)
                 aug_img_metas.append(img_meta)
 
         merged_masks = merge_aug_masks(aug_masks, aug_img_metas, None)
 
         mask_head = (
-            self.models[0].roi_head.mask_head[-1] if "cascade" in self.names[0]
-            else self.models[0].roi_head.mask_head
+            self.models[0].roi_head.mask_head if "rcnn" in self.names[0]
+            else self.models[0].roi_head.mask_head[-1]
         )
 
         masks = mask_head.get_seg_masks(

@@ -14,6 +14,7 @@ BATCH_SIZES = {
     "cascade": {
         "resnet50": 4,
         "resnext101": 3,
+        "resnext101_64x4": 2,
         "swin_tiny": 4,
         "swin_small": 3,
         "swin_base": 2,
@@ -108,7 +109,7 @@ class Config:
     selected_folds = [0]
 
     # Model
-    name = "htc"  # "cascade" "maskrcnn"
+    name = "cascade"  # "cascade" "maskrcnn"
     encoder = "resnext101"
     model_config = f"model_zoo/config_{name}.py"
     pretrained_livecell = True
@@ -117,15 +118,15 @@ class Config:
         data_config = "data/config_semantic.py"
 
     # Training
-    optimizer = "Adam"  # todo : adamw
-    scheduler = "linear"  # "plateau" "linear"
-    weight_decay = 0.0005 if optimizer == "SGD" else 0
+    optimizer = "AdamW"
+    scheduler = "linear"
+    weight_decay = 0.01 if optimizer == "AdamW" else 0
     batch_size = BATCH_SIZES[name][encoder]
     val_bs = batch_size
 
     epochs = 10 * batch_size
 
-    lr = 3e-4
+    lr = 2e-4
     warmup_prop = 0.05
 
     use_fp16 = False  # TODO

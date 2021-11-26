@@ -4,10 +4,10 @@ custom_imports = dict(
     imports=['model_zoo.cascade_mask_scoring']
 )  # does this work ?
 
-num_classes = 3 + 7
+num_classes = 3  # 8
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
-rpn_thresholds = (0.75, 0.5, 0.5)  # (0.7, 0.3, 0.3)
+rpn_thresholds = (0.7, 0.3, 0.3)
 
 pretrained_weights = {  # TODO : Adapt load weights to ignore mask scoring head.
     "resnet50": "../input/weights/cascade_mask_rcnn_r50_fpn_mstrain_3x_coco.pth",
@@ -52,15 +52,15 @@ model = dict(
         loss_bbox=dict(type="SmoothL1Loss", beta=1.0 / 9.0, loss_weight=1.0),
     ),
     roi_head=dict(
-        type="MaskScoringRoIHead",
+        type="CascadeMaskScoringRoIHead",
         mask_iou_head=dict(
             type='MaskIoUHead',
             num_convs=4,
-            num_fcs=2,
+            num_fcs=1,
             roi_feat_size=14,
             in_channels=256,
             conv_out_channels=256,
-            fc_out_channels=1024,
+            fc_out_channels=512,
             num_classes=num_classes,
         ),
         num_stages=3,
@@ -187,6 +187,7 @@ model = dict(
                 mask_size=28,
                 pos_weight=-1,
                 debug=False,
+                mask_thr_binary=0.45,
             ),
             dict(
                 assigner=dict(
@@ -207,6 +208,7 @@ model = dict(
                 mask_size=28,
                 pos_weight=-1,
                 debug=False,
+                mask_thr_binary=0.45,
             ),
             dict(
                 assigner=dict(
@@ -227,6 +229,7 @@ model = dict(
                 mask_size=28,
                 pos_weight=-1,
                 debug=False,
+                mask_thr_binary=0.45,
             ),
         ],
     ),

@@ -35,7 +35,7 @@ def quick_post_process_preds(result, thresh_conf=0.5, thresh_mask=0.5, num_class
 
     # Get masks & filter by confidence
     for c, (boxes_c, masks_c) in enumerate(zip(result[0], result[1])):
-        scores = boxes_c[:, -1]
+        scores = boxes_c[:, -1]  # uses iou score for mask_scoring !
 
         if len(scores):
             last = np.argmax(scores < thresh_conf) if np.min(scores) < thresh_conf else len(masks_c)

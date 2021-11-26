@@ -5,8 +5,12 @@ from transformers import get_linear_schedule_with_warmup
 
 from training.losses import SmoothCrossEntropyLoss, FocalTverskyLoss, lovasz_loss, DiceLoss
 
+NO_DECAY = [
+    "bias", "LayerNorm.weight", "absolute_pos_embed", "relative_position_bias_table", "norm", "bn"
+]
 
-def define_optimizer(name, params, lr=1e-3, weight_decay=0):
+
+def define_optimizer(name, model, lr=1e-3, weight_decay=0):
     """
     Defines the loss function associated to the name.
     Supports optimizers from torch.nn.
@@ -23,15 +27,17 @@ def define_optimizer(name, params, lr=1e-3, weight_decay=0):
     Returns:
         torch optimizer: Optimizer
     """
-    if name == "SGD":
-        optimizer = getattr(torch.optim, name)(
-            params, lr=lr, weight_decay=weight_decay, momentum=0.9
+    opt_params = []
+    for n, p in model.named_parameters():
+        wd = 0 if any(nd in n for nd in NO_DECAY) else weight_decay
+        opt_params.append(
+            {"params": [p], "weight_decay": wd, "lr": lr}
         )
-    else:
-        try:
-            optimizer = getattr(torch.optim, name)(params, lr=lr, weight_decay=weight_decay)
-        except AttributeError:
-            raise NotImplementedError
+
+    try:
+        optimizer = getattr(torch.optim, name)(opt_params, lr=lr)
+    except AttributeError:
+        raise NotImplementedError(f'Optimizer {name} not supported')
 
     return optimizer
 

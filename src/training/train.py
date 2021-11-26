@@ -63,7 +63,7 @@ def fit(
     scaler = torch.cuda.amp.GradScaler()
 
     optimizer = define_optimizer(
-        optimizer_name, model.parameters(), lr=lr, weight_decay=weight_decay
+        optimizer_name, model, lr=lr, weight_decay=weight_decay
     )
 
     train_loader, val_loader = define_loaders(
