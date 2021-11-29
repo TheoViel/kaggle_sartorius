@@ -63,6 +63,7 @@ def load_pretrained_weights(model, weights, verbose=0, adapt_swin=False):
     if verbose:
         print(f"\n -> Loading weights from {weights}\n")
 
+
     dic = torch.load(weights)
     if "state_dict" in dic.keys():  # coco pretrained
         dic = dic["state_dict"]

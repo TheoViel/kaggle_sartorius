@@ -114,7 +114,7 @@ backbones = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        norm_cfg=dict(type='SyncBN', requires_grad=True),
+        norm_cfg=dict(type='BN', requires_grad=True), #SyncBN
         norm_eval=False,
         style="pytorch",
     ),
@@ -128,7 +128,7 @@ backbones = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=1,
-        norm_cfg=dict(type='SyncBN', requires_grad=True),
+        norm_cfg=dict(type='BN', requires_grad=True), #SyncBN
         norm_eval=False,
         style="pytorch",
     ),

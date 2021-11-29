@@ -1,4 +1,5 @@
-from sklearn.model_selection import StratifiedKFold
+import copy
+from sklearn.model_selection import StratifiedGroupKFold
 
 from model_zoo.models import define_model
 from training.train import fit
@@ -110,8 +111,7 @@ def k_fold(config, log_folder=None):
     else:
         df_extra = None
 
-    skf = StratifiedKFold(n_splits=config.k, shuffle=True, random_state=config.random_state)
-    splits = list(skf.split(X=df, y=df["cell_type"]))
+    df, splits = clean_split(df, config)
 
     all_results = []
 
@@ -137,3 +137,15 @@ def k_fold(config, log_folder=None):
                 return results
 
     return all_results
+
+def clean_split(df, config):
+
+    df = copy.deepcopy(df)
+    # remove some wronly annotated examples
+    wrong_annotations = ["03b27b381a5f", "e92c56871769", "eec79772cb99"]
+    df = df.loc[~df.id.isin(wrong_annotations)].reset_index(drop=True)
+
+    sgkf = StratifiedGroupKFold(n_splits=config.k, shuffle=True, random_state=config.random_state)
+
+    splits = list(sgkf.split(X=df, y=df["cell_type"], groups=df["sample_id"]))
+    return df, splits

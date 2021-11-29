@@ -3,10 +3,10 @@
 num_classes = 3 + 7
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
-rpn_thresholds = (0.75, 0.5, 0.5)  # (0.7, 0.3, 0.3)
+rpn_thresholds =  (0.7, 0.3, 0.3) #  (0.75, 0.5, 0.5)
 
 pretrained_weights = {
-    "resnest50": "../input/weights/cascade_mask_rcnn_s50_fpn_syncbn-backbone+head_mstrain_1x_coco",
+    "resnest50": "../input/weights/cascade_mask_rcnn_s50_fpn_syncbn-backbone+head_mstrain_1x_coco.pth",
     "resnest101": "../input/weights/cascade_mask_rcnn_s101_fpn_syncbn-backbone+head_mstrain_1x_coco.pth",  # noqa
 }
 
@@ -15,7 +15,7 @@ pretrained_weights_livecell = {
     "resnest101": pretrained_weights["resnest101"],  # TODO
 }
 
-norm_cfg = dict(type='SyncBN', requires_grad=True)
+norm_cfg = dict(type='SyncBN', requires_grad=True) # SyncBN
 
 model = dict(
     type="CascadeRCNN",
