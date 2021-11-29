@@ -1,11 +1,11 @@
 import torch
 
 from mmcv.parallel import MMDataParallel
-from sklearn.model_selection import StratifiedKFold
 
 from model_zoo.models import define_model
 from model_zoo.ensemble import EnsembleModel
 
+from data.preparation import get_splits
 from data.loader import define_loaders
 from data.dataset import SartoriusDataset
 from data.transforms import define_pipelines
@@ -23,10 +23,7 @@ def inference_val(df, configs, weights, use_tta=False):
         model = define_model(config.model_config, encoder=config.encoder, verbose=0)
         models.append(model)
 
-    skf = StratifiedKFold(
-        n_splits=configs[0].k, shuffle=True, random_state=configs[0].random_state
-    )
-    splits = list(skf.split(X=df, y=df["cell_type"]))
+    splits = get_splits(df, config)
 
     all_results, dfs = [], []
     for i, (train_idx, val_idx) in enumerate(splits):
@@ -71,10 +68,7 @@ def inference_single(df, configs, weights, idx=0, use_tta=False):
         model = define_model(config.model_config, encoder=config.encoder, verbose=0)
         models.append(model)
 
-    skf = StratifiedKFold(
-        n_splits=configs[0].k, shuffle=True, random_state=configs[0].random_state
-    )
-    splits = list(skf.split(X=df, y=df["cell_type"]))
+    splits = get_splits(df, config)
 
     for i, (train_idx, val_idx) in enumerate(splits):
         df_val = df.iloc[val_idx].copy().reset_index(drop=True)

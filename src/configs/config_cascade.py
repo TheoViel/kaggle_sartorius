@@ -1,34 +1,32 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/models/mask_rcnn_r50_fpn.py
 
-custom_imports = dict(
-    imports=['model_zoo.cascade_mask_scoring']
-)  # does this work ?
-
-num_classes = 3  # 8
+num_classes = 3 + 7
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
-rpn_thresholds = (0.7, 0.3, 0.3)
+rpn_thresholds = (0.75, 0.5, 0.5)  # (0.7, 0.3, 0.3)
 
-pretrained_weights = {  # TODO : Adapt load weights to ignore mask scoring head.
+pretrained_weights = {
     "resnet50": "../input/weights/cascade_mask_rcnn_r50_fpn_mstrain_3x_coco.pth",
     "resnet101": "../input/weights/cascade_mask_rcnn_r101_fpn_mstrain_3x_coco.pth",
     "resnext101": "../input/weights/cascade_mask_rcnn_x101_32x4d_fpn_mstrain_3x_coco.pth",
+    "resnext101_64x4": "../input/weights/cascade_mask_rcnn_x101_64x4d_fpn_mstrain_3x_coco.pth",
     "swin_tiny": "../input/weights/cascade_mask_rcnn_swin_tiny_patch4_window7.pth",
     "swin_small": "../input/weights/cascade_mask_rcnn_swin_small_patch4_window7.pth",
     "swin_base": "../input/weights/cascade_mask_rcnn_swin_base_patch4_window7.pth",
 }
 
 pretrained_weights_livecell = {
-    "resnet50": "../logs/pretrain/2021-11-21/1/cascade_resnet50_0.pt",  # TODO
-    "resnext101": "../logs/pretrain/2021-11-21/0/cascade_resnext101_0.pt",  # TODO
+    "resnet50": "../logs/pretrain/2021-11-21/1/cascade_resnet50_0.pt",
+    "resnext101": "../logs/pretrain/2021-11-21/0/cascade_resnext101_0.pt",
+    "resnext101_64x4": "../logs/pretrain/2021-11-27/0/cascade_resnext101_64x4_0.pt",
     "swin_tiny": pretrained_weights["swin_tiny"],  # TODO
-    "swin_small": pretrained_weights["swin_small"],  # TODO
+    "swin_small": "../logs/pretrain/2021-11-26/1/cascade_swin_small_0.pt",  # TODO
     "swin_base": pretrained_weights["swin_base"],  # TODO
 }
 
 
 model = dict(
-    type="CascadeMaskScoringRCNN",
+    type="CascadeRCNN",
     backbone="",
     neck=dict(
         type="FPN", in_channels=[256, 512, 1024, 2048], out_channels=256, num_outs=5
@@ -52,17 +50,7 @@ model = dict(
         loss_bbox=dict(type="SmoothL1Loss", beta=1.0 / 9.0, loss_weight=1.0),
     ),
     roi_head=dict(
-        type="CascadeMaskScoringRoIHead",
-        mask_iou_head=dict(
-            type='MaskIoUHead',
-            num_convs=4,
-            num_fcs=1,
-            roi_feat_size=14,
-            in_channels=256,
-            conv_out_channels=256,
-            fc_out_channels=512,
-            num_classes=num_classes,
-        ),
+        type="CascadeRoIHead",
         num_stages=3,
         stage_loss_weights=[1, 0.5, 0.25],
         bbox_roi_extractor=dict(
@@ -187,7 +175,6 @@ model = dict(
                 mask_size=28,
                 pos_weight=-1,
                 debug=False,
-                mask_thr_binary=0.45,
             ),
             dict(
                 assigner=dict(
@@ -208,7 +195,6 @@ model = dict(
                 mask_size=28,
                 pos_weight=-1,
                 debug=False,
-                mask_thr_binary=0.45,
             ),
             dict(
                 assigner=dict(
@@ -229,7 +215,6 @@ model = dict(
                 mask_size=28,
                 pos_weight=-1,
                 debug=False,
-                mask_thr_binary=0.45,
             ),
         ],
     ),

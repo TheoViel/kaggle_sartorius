@@ -3,25 +3,19 @@
 num_classes = 3 + 7
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
-rpn_thresholds = (0.75, 0.5, 0.5)  # (0.7, 0.3, 0.3)
+rpn_thresholds = (0.7, 0.3, 0.3)  # (0.75, 0.5, 0.5)
 
 pretrained_weights = {
-    "resnet50": "../input/weights/cascade_mask_rcnn_r50_fpn_mstrain_3x_coco.pth",
-    "resnet101": "../input/weights/cascade_mask_rcnn_r101_fpn_mstrain_3x_coco.pth",
-    "resnext101": "../input/weights/cascade_mask_rcnn_x101_32x4d_fpn_mstrain_3x_coco.pth",
-    "swin_tiny": "../input/weights/cascade_mask_rcnn_swin_tiny_patch4_window7.pth",
-    "swin_small": "../input/weights/cascade_mask_rcnn_swin_small_patch4_window7.pth",
-    "swin_base": "../input/weights/cascade_mask_rcnn_swin_base_patch4_window7.pth",
+    "resnest50": "../input/weights/cascade_mask_rcnn_s50_fpn_syncbn-backbone+head_mstrain_1x_coco.pth",  # noqa
+    "resnest101": "../input/weights/cascade_mask_rcnn_s101_fpn_syncbn-backbone+head_mstrain_1x_coco.pth",  # noqa
 }
 
 pretrained_weights_livecell = {
-    "resnet50": "../logs/pretrain/2021-11-21/1/cascade_resnet50_0.pt",
-    "resnext101": "../logs/pretrain/2021-11-21/0/cascade_resnext101_0.pt",
-    "swin_tiny": pretrained_weights["swin_tiny"],  # TODO
-    "swin_small": pretrained_weights["swin_small"],  # TODO
-    "swin_base": pretrained_weights["swin_base"],  # TODO
+    "resnest50": pretrained_weights["resnest50"],  # TODO
+    "resnest101": pretrained_weights["resnest101"],  # TODO
 }
 
+norm_cfg = dict(type='SyncBN', requires_grad=True)
 
 model = dict(
     type="CascadeRCNN",
@@ -59,11 +53,13 @@ model = dict(
         ),
         bbox_head=[
             dict(
-                type="Shared2FCBBoxHead",
+                type="Shared4Conv1FCBBoxHead",
                 in_channels=256,
+                conv_out_channels=256,
                 fc_out_channels=1024,
+                norm_cfg=norm_cfg,
                 roi_feat_size=7,
-                num_classes=num_classes,
+                num_classes=80,
                 bbox_coder=dict(
                     type="DeltaXYWHBBoxCoder",
                     target_means=[0.0, 0.0, 0.0, 0.0],
@@ -76,11 +72,13 @@ model = dict(
                 loss_bbox=dict(type="SmoothL1Loss", beta=1.0, loss_weight=1.0),
             ),
             dict(
-                type="Shared2FCBBoxHead",
+                type="Shared4Conv1FCBBoxHead",
                 in_channels=256,
+                conv_out_channels=256,
                 fc_out_channels=1024,
+                norm_cfg=norm_cfg,
                 roi_feat_size=7,
-                num_classes=num_classes,
+                num_classes=80,
                 bbox_coder=dict(
                     type="DeltaXYWHBBoxCoder",
                     target_means=[0.0, 0.0, 0.0, 0.0],
@@ -93,11 +91,13 @@ model = dict(
                 loss_bbox=dict(type="SmoothL1Loss", beta=1.0, loss_weight=1.0),
             ),
             dict(
-                type="Shared2FCBBoxHead",
+                type="Shared4Conv1FCBBoxHead",
                 in_channels=256,
+                conv_out_channels=256,
                 fc_out_channels=1024,
+                norm_cfg=norm_cfg,
                 roi_feat_size=7,
-                num_classes=num_classes,
+                num_classes=80,
                 bbox_coder=dict(
                     type="DeltaXYWHBBoxCoder",
                     target_means=[0.0, 0.0, 0.0, 0.0],
@@ -121,6 +121,7 @@ model = dict(
             num_convs=4,
             in_channels=256,
             conv_out_channels=256,
+            norm_cfg=norm_cfg,
             num_classes=num_classes,
             loss_mask=dict(type="CrossEntropyLoss", use_mask=True, loss_weight=1.0),
         ),
