@@ -43,7 +43,7 @@ backbones = dict(
         base_width=4,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
+        frozen_stages=-1,
         norm_cfg=dict(type='BN', requires_grad=True),
         style='pytorch'
     ),
@@ -68,8 +68,8 @@ backbones = dict(
     ),
     swin_small=dict(
         type='SwinTransformer',
-        patch_size=2,  # 4
-        strides=(2, 2, 2, 2),
+        patch_size=4,  # 2
+        strides=(4, 2, 2, 2),
         embed_dims=96,
         depths=[2, 2, 18, 2],
         num_heads=[3, 6, 12, 24],
@@ -113,7 +113,7 @@ backbones = dict(
         avg_down_stride=True,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
+        frozen_stages=-1,
         norm_cfg=dict(type='SyncBN', requires_grad=True),
         norm_eval=False,
         style="pytorch",
@@ -127,7 +127,7 @@ backbones = dict(
         avg_down_stride=True,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
+        frozen_stages=-1,
         norm_cfg=dict(type='SyncBN', requires_grad=True),
         norm_eval=False,
         style="pytorch",

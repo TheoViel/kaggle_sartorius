@@ -19,6 +19,18 @@ BATCH_SIZES = {
         "swin_small": 3,
         "swin_base": 2,
     },
+    "cascade_resnest": {
+        "resnest50": 4,
+        "resnest101": 3,
+    },
+    "cascade_mask_scoring": {
+        "resnet50": 4,
+        "resnext101": 3,
+        # "resnext101_64x4": 2,
+        # "swin_tiny": 4,
+        # "swin_small": 3,
+        # "swin_base": 2,
+    },
     "htc": {
         "resnet50": 3,
         "resnext101": 2,
@@ -67,6 +79,13 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--name",
+        type=str,
+        default=None,
+        help="Model name",
+    )
+
+    parser.add_argument(
         "--use_extra_samples",
         type=bool,
         default=None,
@@ -95,27 +114,29 @@ class Config:
 
     # Images
     fix = True
+    remove_anomalies = True
     extra_name = "livecell_no_shsy5y"
     use_extra_samples = False
     num_classes = 3
     pretrained_livecell = True
 
     use_mosaic = False
-    data_config = "data/config_mosaic.py" if use_mosaic else "data/config.py"
+    data_config = "configs/config_aug_mosaic.py" if use_mosaic else "configs/config_aug.py"
 
     # k-fold
+    split = "sgkf"
     k = 5
     random_state = 0
     selected_folds = [0]
 
     # Model
-    name = "cascade"  # "cascade" "maskrcnn"
+    name = "cascade_mask_scoring"  # "cascade" "maskrcnn"
     encoder = "resnext101"
-    model_config = f"model_zoo/config_{name}.py"
+    model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
 
     if name == "htc":
-        data_config = "data/config_semantic.py"
+        data_config = "configs/config_aug_semantic.py"
 
     # Training
     optimizer = "AdamW"
@@ -148,6 +169,17 @@ if __name__ == "__main__":
 
     if args.encoder is not None:
         config.encoder = args.encoder
+
+    if args.name is not None:
+        config.name = args.name
+
+        config.model_config = f"configs/config_{config.name}.py"
+        if config.name == "htc":
+            config.data_config = "configs/config_aug_semantic.py"
+
+    if args.encoder is not None or args.name is not None:
+        config.batch_size = BATCH_SIZES[config.name][config.encoder]
+        config.epochs = 10 * config.batch_size
 
     if args.use_extra_samples is not None:
         config.use_extra_samples = args.use_extra_samples

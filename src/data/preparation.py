@@ -1,12 +1,15 @@
 import ast
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import StratifiedKFold, StratifiedGroupKFold
 
 from params import DATA_PATH, OUT_PATH, TRAIN_IMG_PATH
 from params import LIVECELL_PATH, LIVECELL_FOLDERS, LIVECELL_CLASSES
 
+WRONG_ANNOTATIONS = ["03b27b381a5f", "e92c56871769", "eec79772cb99"]
 
-def prepare_data(fix=False):
+
+def prepare_data(fix=False, remove_anomalies=False):
     df = pd.read_csv(DATA_PATH + "train.csv")
     df = df.groupby('id').agg(list).reset_index()
     for col in df.columns[2:]:
@@ -27,6 +30,8 @@ def prepare_data(fix=False):
 
     df['is_extra'] = 0
 
+    df = df.loc[~df['id'].isin(WRONG_ANNOTATIONS)].reset_index(drop=True)
+
     return df
 
 
@@ -46,3 +51,18 @@ def prepare_extra_data(name):
     df['is_extra'] = 1
 
     return df
+
+
+def get_splits(df, config):
+    if config.split == "skf":
+        skf = StratifiedKFold(
+            n_splits=config.k, shuffle=True, random_state=config.random_state
+        )
+        splits = list(skf.split(X=df, y=df["cell_type"]))
+    elif config.split == "sgkf":
+        sgkf = StratifiedGroupKFold(
+            n_splits=config.k, shuffle=True, random_state=config.random_state
+        )
+        splits = list(sgkf.split(X=df, y=df["cell_type"], groups=df["sample_id"]))
+
+    return splits

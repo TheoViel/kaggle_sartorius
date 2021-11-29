@@ -1,9 +1,7 @@
-from sklearn.model_selection import StratifiedKFold
-
 from model_zoo.models import define_model
 from training.train import fit
 
-from data.preparation import prepare_data, prepare_extra_data
+from data.preparation import prepare_data, prepare_extra_data, get_splits
 from data.transforms import define_pipelines, to_mosaic
 from data.dataset import SartoriusDataset
 
@@ -102,16 +100,15 @@ def k_fold(config, log_folder=None):
         log_folder (None or str, optional): Folder to logs results to. Defaults to None.
     """
 
-    df = prepare_data(fix=False)
-    df_fix = prepare_data(fix=True)
+    df = prepare_data(fix=False, remove_anomalies=config.remove_anomalies)
+    df_fix = prepare_data(fix=True, remove_anomalies=config.remove_anomalies)
 
     if config.use_extra_samples > 0:
         df_extra = prepare_extra_data(config.extra_name)
     else:
         df_extra = None
 
-    skf = StratifiedKFold(n_splits=config.k, shuffle=True, random_state=config.random_state)
-    splits = list(skf.split(X=df, y=df["cell_type"]))
+    splits = get_splits(df, config)
 
     all_results = []
 
