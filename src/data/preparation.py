@@ -19,7 +19,7 @@ def prepare_data(fix=False, remove_anomalies=False):
     df['img_path'] = TRAIN_IMG_PATH + df['id'] + ".png"
 
     if fix:
-        df_mmdet = pd.read_csv(OUT_PATH + "mmdet_data.csv")
+        df_mmdet = pd.read_csv(OUT_PATH + "mmdet_data_fix.csv")  # mmdet_data.csv
     else:
         df_mmdet = pd.read_csv(OUT_PATH + "mmdet_data_nofix.csv")
 
@@ -30,7 +30,8 @@ def prepare_data(fix=False, remove_anomalies=False):
 
     df['is_extra'] = 0
 
-    df = df.loc[~df['id'].isin(WRONG_ANNOTATIONS)].reset_index(drop=True)
+    if remove_anomalies:
+        df = df.loc[~df['id'].isin(WRONG_ANNOTATIONS)].reset_index(drop=True)
 
     return df
 

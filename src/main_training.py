@@ -130,8 +130,8 @@ class Config:
     selected_folds = [0]
 
     # Model
-    name = "cascade_mask_scoring"  # "cascade" "maskrcnn"
-    encoder = "resnext101"
+    name = "htc"  # "cascade" "maskrcnn" "htc"
+    encoder = "resnet50"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
 

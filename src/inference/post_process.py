@@ -1,3 +1,4 @@
+import cv2
 import torch
 import numpy as np
 import pycocotools
@@ -155,7 +156,9 @@ def mask_nms_multithresh(masks, boxes, thresholds=[0.5], ious=None):
     return picks
 
 
-def process_results(results, thresholds_mask, thresholds_nms, thresholds_conf, remove_overlap):
+def process_results(
+    results, thresholds_mask, thresholds_nms, thresholds_conf, remove_overlap=True, corrupt=False
+):
     all_masks, all_boxes, cell_types = [], [], []
 
     for result in tqdm(results):
@@ -203,7 +206,27 @@ def process_results(results, thresholds_mask, thresholds_nms, thresholds_conf, r
         if remove_overlap:
             masks = remove_overlap_naive(masks)
 
+        # Corrupt
+        if corrupt and cell == 1:  # astro
+            masks = np.array([degrade_mask(mask) for mask in masks])
+
         all_masks.append(masks)
         all_boxes.append(boxes)
 
     return all_masks, all_boxes, cell_types
+
+
+def degrade_mask(mask):
+    cont, hier = cv2.findContours(mask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    img_cont = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
+    img_cont = cv2.drawContours(img_cont, cont, -1, (255, 255, 255), 1)
+    img_cont = img_cont[:, :, 0]
+
+    conv_mask = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
+
+    for c in cont:
+        conv_mask = cv2.fillConvexPoly(conv_mask, points=c, color=(255, 255, 255))
+    conv_mask = (conv_mask[:, :, 0] > 0).astype(np.uint8)
+
+    return conv_mask, img_cont

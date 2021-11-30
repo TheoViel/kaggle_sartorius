@@ -3,7 +3,7 @@ import numpy as np
 from tqdm.notebook import tqdm
 
 from utils.metrics import iou_map
-from inference.post_process import remove_overlap_naive, mask_nms_multithresh
+from inference.post_process import remove_overlap_naive, mask_nms_multithresh, degrade_mask
 
 
 def evaluate_at_confidences(masks, boxes, confidences, rle_truth):
@@ -27,7 +27,13 @@ def evaluate_at_confidences(masks, boxes, confidences, rle_truth):
 
 
 def tweak_thresholds(
-    results, dataset, thresholds_mask, thresholds_nms, thresholds_conf, remove_overlap=False
+    results,
+    dataset,
+    thresholds_mask,
+    thresholds_nms,
+    thresholds_conf,
+    remove_overlap=False,
+    corrupt=False
 ):
     scores = [[[[] for _ in thresholds_nms] for _ in thresholds_mask] for _ in range(3)]
 
@@ -56,6 +62,9 @@ def tweak_thresholds(
 
                 if remove_overlap:
                     masks_picked = remove_overlap_naive(masks_picked, ious=ious[pick].T[pick])
+
+                if corrupt and cell_type == 1:  # astro
+                    masks_picked = np.array([degrade_mask(mask)[0] for mask in masks_picked])
 
                 score = evaluate_at_confidences(
                     masks_picked,

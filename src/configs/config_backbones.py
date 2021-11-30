@@ -2,7 +2,19 @@ out_channels = {
     "swin_tiny": [96, 192, 384, 768],
     "swin_small": [96, 192, 384, 768],
     "swin_base": [128, 256, 512, 1024],
+    "efficientnetv2_s": [48, 64, 160, 256],
+    "efficientnetv2_m": [48, 80, 176, 512],
+    "efficientnetv2_l": [64, 96, 224, 640],
+    "efficientnet_b3": [32, 48, 136, 384],
+    "efficientnet_b4": [32, 56, 160, 448],
+    "efficientnet_b5": [40, 64, 176, 512],
+    "efficientnet_b6": [40, 72, 200, 576],
+    "efficientnet_b7": [48, 80, 224, 640],
 }
+
+custom_imports = dict(
+    imports=['model_zoo.efficientnet']
+)
 
 backbones = dict(
     resnet50=dict(
@@ -131,5 +143,53 @@ backbones = dict(
         norm_cfg=dict(type='SyncBN', requires_grad=True),
         norm_eval=False,
         style="pytorch",
+    ),
+    efficientnetv2_s=dict(
+        type="EfficientNet",
+        name='tf_efficientnetv2_s_in21ft1k',
+        blocks_idx=[1, 2, 4, 5],
+        pretrained=True,
+    ),
+    efficientnetv2_m=dict(
+        type="EfficientNet",
+        name='tf_efficientnetv2_m_in21ft1k',
+        blocks_idx=[1, 2, 4, 6],
+        pretrained=True,
+    ),
+    efficientnetv2_l=dict(
+        type="EfficientNet",
+        name='tf_efficientnetv2_l_in21ft1k',
+        blocks_idx=[1, 2, 4, 6],
+        pretrained=True,
+    ),
+    efficientnet_b3=dict(
+        type="EfficientNet",
+        name='tf_efficientnet_b3_ns',
+        blocks_idx=[1, 2, 4, 6],
+        pretrained=True,
+    ),
+    efficientnet_b4=dict(
+        type="EfficientNet",
+        name='tf_efficientnet_b4_ns',
+        blocks_idx=[1, 2, 4, 6],
+        pretrained=True,
+    ),
+    efficientnet_b5=dict(
+        type="EfficientNet",
+        name='tf_efficientnet_b5_ns',
+        blocks_idx=[1, 2, 4, 6],
+        pretrained=True,
+    ),
+    efficientnet_b6=dict(
+        type="EfficientNet",
+        name='tf_efficientnet_b6_ns',
+        blocks_idx=[1, 2, 4, 6],
+        pretrained=True,
+    ),
+    efficientnet_b7=dict(
+        type="EfficientNet",
+        name='tf_efficientnet_b7_ns',
+        blocks_idx=[1, 2, 4, 6],
+        pretrained=True,
     ),
 )

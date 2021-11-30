@@ -1,9 +1,9 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/models/mask_rcnn_r50_fpn.py
 
-num_classes = 3 + 7
+num_classes = 3  # + 7
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
-rpn_thresholds = (0.75, 0.5, 0.5)  # (0.7, 0.3, 0.3)
+rpn_thresholds = (0.7, 0.3, 0.3)
 
 pretrained_weights = {
     "resnet50": "../input/weights/cascade_mask_rcnn_r50_fpn_mstrain_3x_coco.pth",
@@ -19,9 +19,7 @@ pretrained_weights_livecell = {
     "resnet50": "../logs/pretrain/2021-11-21/1/cascade_resnet50_0.pt",
     "resnext101": "../logs/pretrain/2021-11-21/0/cascade_resnext101_0.pt",
     "resnext101_64x4": "../logs/pretrain/2021-11-27/0/cascade_resnext101_64x4_0.pt",
-    "swin_tiny": pretrained_weights["swin_tiny"],  # TODO
-    "swin_small": "../logs/pretrain/2021-11-26/1/cascade_swin_small_0.pt",  # TODO
-    "swin_base": pretrained_weights["swin_base"],  # TODO
+    "swin_small": "../logs/pretrain/2021-11-26/1/cascade_swin_small_0.pt",
 }
 
 

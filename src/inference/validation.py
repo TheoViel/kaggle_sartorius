@@ -23,7 +23,7 @@ def inference_val(df, configs, weights, use_tta=False):
         model = define_model(config.model_config, encoder=config.encoder, verbose=0)
         models.append(model)
 
-    splits = get_splits(df, config)
+    splits = get_splits(df, configs[0])
 
     all_results, dfs = [], []
     for i, (train_idx, val_idx) in enumerate(splits):
@@ -44,10 +44,7 @@ def inference_val(df, configs, weights, use_tta=False):
         model = MMDataParallel(
             EnsembleModel(
                 models_trained,
-                use_tta=use_tta,
                 names=names,
-                use_tta_proposals=False,
-                single_fold_proposals=False
             )
         )
 
@@ -68,7 +65,7 @@ def inference_single(df, configs, weights, idx=0, use_tta=False):
         model = define_model(config.model_config, encoder=config.encoder, verbose=0)
         models.append(model)
 
-    splits = get_splits(df, config)
+    splits = get_splits(df, configs[0])
 
     for i, (train_idx, val_idx) in enumerate(splits):
         df_val = df.iloc[val_idx].copy().reset_index(drop=True)
@@ -84,10 +81,7 @@ def inference_single(df, configs, weights, idx=0, use_tta=False):
         model = MMDataParallel(
             EnsembleModel(
                 models_trained,
-                use_tta=use_tta,
                 names=names,
-                use_tta_proposals=False,
-                single_fold_proposals=False
             )
         )
 

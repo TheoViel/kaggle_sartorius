@@ -57,7 +57,7 @@ def merge_aug_proposals(aug_proposals, img_metas, cfg):
     return merged_proposals
 
 
-def merge_aug_bboxes(aug_bboxes, aug_scores, img_metas, rcnn_test_cfg):
+def merge_aug_bboxes(aug_bboxes, aug_scores, img_metas):
     """
     Merge augmented detection bboxes and scores.
     This simply takes the mean.
@@ -66,7 +66,6 @@ def merge_aug_bboxes(aug_bboxes, aug_scores, img_metas, rcnn_test_cfg):
         aug_bboxes (list[Tensor]): shape (n, 4*#class)
         aug_scores (list[Tensor] or None): shape (n, #class)
         img_shapes (list[Tensor]): shape (3, ).
-        rcnn_test_cfg (dict): rcnn test config.
 
     Returns:
         tuple: (bboxes, scores)

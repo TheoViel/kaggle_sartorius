@@ -8,10 +8,11 @@ from mmdet.core import bbox2roi, merge_aug_masks
 from mmdet.models.detectors import BaseDetector
 
 from model_zoo.wrappers import get_wrappers
-from model_zoo.merging import (
+from model_zoo.merging import (  # noqa
     merge_aug_proposals,
     merge_aug_bboxes,
     single_class_boxes_nms,
+    merge_aug_proposals
 )
 
 
@@ -19,10 +20,7 @@ class EnsembleModel(BaseDetector):
     def __init__(
         self,
         models,
-        use_tta=False,
         names=[],
-        use_tta_proposals=False,
-        single_fold_proposals=False
     ):
         super().__init__()
         self.models = nn.ModuleList([model.module for model in models])
@@ -33,19 +31,6 @@ class EnsembleModel(BaseDetector):
         self.num_classes = 3
         self.bbox_iou_threshold = 0.75
 
-        self.use_tta_proposals = use_tta_proposals
-        self.single_fold_proposals = single_fold_proposals
-
-        self.rpn_cfg = mmcv.Config(
-            dict(
-                score_thr=0.0,
-                max_per_img=None,
-                nms=dict(
-                    type="nms", iou_threshold=self.bbox_iou_threshold
-                ),
-                min_bbox_size=0,
-            )
-        )
         self.rcnn_cfg = mmcv.Config(
             dict(
                 score_thr=0.25,
@@ -58,22 +43,8 @@ class EnsembleModel(BaseDetector):
         self.update_model_configs()
 
     def update_model_configs(self):
-        n_models = (
-            len([n for n in self.names if n.endswith('_0.pt')])
-            if self.single_fold_proposals
-            else len(self.models)
-        )
-        n_fwd = n_models + 3 * n_models * self.use_tta_proposals
-
-        if n_fwd == 1:
-            nms_pre = 2000
-            max_per_img = 1000
-        elif n_fwd <= 5:
-            nms_pre = 1500
-            max_per_img = 750
-        else:
-            nms_pre = 1000
-            max_per_img = 500
+        nms_pre = 2000
+        max_per_img = 1000
 
         for model in self.models:
             model.rpn_head.test_cfg = mmcv.Config(
@@ -108,9 +79,45 @@ class EnsembleModel(BaseDetector):
         Returns:
             [type]: [description]
         """
-        imgs_per_gpu = len(img_metas[0])
-        aug_proposals = [[] for _ in range(imgs_per_gpu)]
-        aug_img_metas = [[] for _ in range(imgs_per_gpu)]
+        aug_bboxes, aug_scores = [], []
+        for i, model in enumerate(self.models):
+
+            for x, img_meta in zip(model.extract_feats(imgs), img_metas):
+                cls_score, bbox_pred = model.rpn_head(x)
+
+                aug_bboxes.append(bbox_pred)
+                aug_scores.append(cls_score)
+
+                break  # no tta
+
+        merged_bboxes, merged_scores = [], []
+        for lvl in range(len(aug_bboxes[0])):
+            merged_bboxes_lvl = torch.stack([bboxes[lvl] for bboxes in aug_bboxes]).mean(dim=0)
+            merged_scores_lvl = torch.stack([scores[lvl] for scores in aug_scores]).mean(dim=0)
+
+            # print(merged_bboxes_lvl.size(), merged_scores_lvl.size())
+            merged_bboxes.append(merged_bboxes_lvl)
+            merged_scores.append(merged_scores_lvl)
+
+        proposal_list = self.models[0].rpn_head.get_bboxes(
+            merged_scores, merged_bboxes, img_metas[0]
+        )
+
+        return proposal_list, (merged_bboxes, merged_scores)
+
+    def get_proposals_tta(self, imgs, img_metas):
+        """
+        TODO
+        This doesn't work yet.
+
+        Args:
+            imgs ([type]): [description]
+            img_metas ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        aug_bboxes, aug_scores, aug_img_metas = {}, {}, {}
 
         for i, model in enumerate(self.models):
 
@@ -119,22 +126,68 @@ class EnsembleModel(BaseDetector):
                     continue
 
             for x, img_meta in zip(model.extract_feats(imgs), img_metas):
-                aug_img_metas.append(img_meta)
+                flip_direction = img_meta[0]["flip_direction"]
 
-                proposal_list = model.rpn_head.simple_test_rpn(x, img_meta)
-                for i, proposals in enumerate(proposal_list):
-                    aug_proposals[i].append(proposals)
-                    aug_img_metas[i] += img_meta
+                cls_score, bbox_pred = model.rpn_head(x)
 
-                if not self.use_tta_proposals:
-                    break
+                try:
+                    aug_bboxes[flip_direction].append(bbox_pred)
+                    aug_scores[flip_direction].append(cls_score)
+                    aug_img_metas[flip_direction].append(img_meta)
+                except KeyError:
+                    aug_bboxes[flip_direction] = [bbox_pred]
+                    aug_scores[flip_direction] = [cls_score]
+                    aug_img_metas[flip_direction] = [img_meta]
 
-        proposal_list = [
-            merge_aug_proposals(proposals, img_meta, self.rpn_cfg)
-            for proposals, img_meta in zip(aug_proposals, aug_img_metas)
-        ]
+        proposals, img_metas_proposals = [], []
+        for flip_direction in aug_bboxes.keys():
+            merged_bboxes, merged_scores = [], []
+            for lvl in range(len(aug_bboxes[flip_direction][0])):
+                merged_bboxes_lvl = torch.stack(
+                    [bboxes[lvl] for bboxes in aug_bboxes[flip_direction]]
+                ).mean(dim=0)
+                merged_scores_lvl = torch.stack(
+                    [scores[lvl] for scores in aug_scores[flip_direction]]
+                ).mean(dim=0)
 
-        return proposal_list, aug_proposals
+                # print(merged_bboxes_lvl.size())
+
+                # if flip_direction == "horizontal":
+                #     merged_bboxes_lvl = merged_bboxes_lvl.flip([3])
+                #     merged_scores_lvl = merged_scores_lvl.flip([3])
+                # elif flip_direction == "vertical":
+                #     merged_bboxes_lvl = merged_bboxes_lvl.flip([3])
+                #     merged_scores_lvl = merged_scores_lvl.flip([3])
+                # elif flip_direction == "diagonal":
+                #     merged_bboxes_lvl = merged_bboxes_lvl.flip([2, 3])
+                #     merged_scores_lvl = merged_scores_lvl.flip([2, 3])
+
+                merged_bboxes.append(merged_bboxes_lvl)
+                merged_scores.append(merged_scores_lvl)
+
+            proposal_list = self.models[0].rpn_head.get_bboxes(
+                merged_scores, merged_bboxes, aug_img_metas[flip_direction][0]
+            )
+
+            if flip_direction in ["horizontal"]:
+                # print(len(proposal_list), proposal_list[0].size())
+                proposals.append(proposal_list)
+                img_metas_proposals.append(aug_img_metas[flip_direction][0])
+                # print(aug_img_metas[flip_direction][0])
+
+        proposal_list_final = []
+
+        for i in range(len(proposals[0])):
+            # Doesn't work but I could try to use NMS
+            merged_bboxes, merged_scores = merge_aug_bboxes(
+                [p[i][:, :4] for p in proposals],
+                [p[i][:, 4] for p in proposals],
+                img_metas_proposals,
+            )
+            merged_proposal = torch.cat([merged_bboxes, merged_scores.unsqueeze(1)], 1)
+            proposal_list_final.append(merged_proposal)
+
+        return proposal_list_final, (merged_bboxes, merged_scores)
 
     def get_bboxes(self, imgs, img_metas, proposal_list):
         """
@@ -177,7 +230,7 @@ class EnsembleModel(BaseDetector):
                 aug_img_metas.append(img_meta)
 
         merged_bboxes, merged_scores = merge_aug_bboxes(
-            aug_bboxes, aug_scores, aug_img_metas, self.rcnn_cfg
+            aug_bboxes, aug_scores, aug_img_metas
         )
 
         det_bboxes, det_labels = single_class_boxes_nms(

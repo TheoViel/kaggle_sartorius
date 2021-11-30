@@ -17,7 +17,7 @@ def define_model(config_file, encoder="resnet50", pretrained_livecell=False, ver
     cfg_backbones = mmcv.Config.fromfile(config_backbone_file)
     cfg.model.backbone = cfg_backbones.backbones[encoder]
 
-    if "swin" in encoder:  # update neck channels
+    if encoder in cfg_backbones.out_channels.keys():  # update neck channels
         cfg.model.neck.in_channels = cfg_backbones.out_channels[encoder]
 
     # Build model
@@ -28,15 +28,20 @@ def define_model(config_file, encoder="resnet50", pretrained_livecell=False, ver
     # Reduce stride
     if "resnet" in encoder or "resnext" in encoder:
         model.backbone.conv1.stride = (1, 1)
+    elif "efficientnet" in encoder:
+        model.backbone.effnet.conv_stem.stride = (1, 1)
 
     model = MMDataParallel(model)
 
     # Weights
-    weights = (
-        cfg.pretrained_weights_livecell[encoder]
-        if pretrained_livecell
-        else cfg.pretrained_weights[encoder]
-    )
+    try:
+        weights = (
+            cfg.pretrained_weights_livecell[encoder]
+            if pretrained_livecell
+            else cfg.pretrained_weights[encoder]
+        )
+    except KeyError:
+        weights = None
 
     model = load_pretrained_weights(
         model,
