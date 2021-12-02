@@ -9,10 +9,9 @@ from mmdet.models.detectors.two_stage import TwoStageDetector
 
 @DETECTORS.register_module()
 class CascadeMaskScoringRCNN(TwoStageDetector):
-    """Mask Scoring RCNN.
-    https://arxiv.org/abs/1903.00241
     """
-
+    Mask Scoring RCNN adapted to the Cascade architecture
+    """
     def __init__(
         self,
         backbone,

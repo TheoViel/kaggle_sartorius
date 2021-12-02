@@ -1,105 +1,167 @@
-# https://github.com/boliu61/open-images-2019-instance-segmentation/blob/52a7ec2c254deb7b702aa7a085855e31a5254624/mmdetection/mmdet/models/detectors/ensemble_model.py#L7
-
 import mmcv
 import torch
+import numpy as np
+
 from torch import nn
 from mmdet.core import bbox_mapping
 from mmdet.core import bbox2roi, merge_aug_masks
 from mmdet.models.detectors import BaseDetector
 
 from model_zoo.wrappers import get_wrappers
-from model_zoo.merging import (
-    merge_aug_proposals,
-    merge_aug_bboxes,
-    single_class_boxes_nms,
-)
+from model_zoo.custom_head_functions import get_rpn_boxes, get_seg_masks
+from model_zoo.merging import merge_aug_bboxes, single_class_boxes_nms
 
 
 class EnsembleModel(BaseDetector):
+    """
+    Wrapper to ensemble models.
+    """
     def __init__(
         self,
         models,
-        use_tta=False,
+        config,
         names=[],
-        use_tta_proposals=False,
-        single_fold_proposals=False
     ):
+        """
+        Constructor.
+
+        Args:
+            models (list of mmdet MMDataParallel): Models to ensemble.
+            config (dict): Ensemble config.
+            names (list, optional): Model names. Defaults to [].
+        """
         super().__init__()
         self.models = nn.ModuleList([model.module for model in models])
+        self.config = config
         self.names = names
 
         self.wrappers = get_wrappers(self.names)
+        self.get_configs()
 
-        self.num_classes = 3
-        self.bbox_iou_threshold = 0.75
+    def get_configs(self):
+        """
+        Creates the rpn and rcnn configs from the config dict.
+        """
+        self.rpn_cfgs, self.rcnn_cfgs = [], []
 
-        self.use_tta_proposals = use_tta_proposals
-        self.single_fold_proposals = single_fold_proposals
-
-        self.rpn_cfg = mmcv.Config(
-            dict(
-                score_thr=0.0,
-                max_per_img=None,
-                nms=dict(
-                    type="nms", iou_threshold=self.bbox_iou_threshold
-                ),
-                min_bbox_size=0,
-            )
-        )
-        self.rcnn_cfg = mmcv.Config(
-            dict(
-                score_thr=0.25,
-                nms=dict(type="nms", iou_threshold=self.bbox_iou_threshold),
-                max_per_img=None,
-                mask_thr_binary=-1,
-            )
-        )
-
-        self.update_model_configs()
-
-    def update_model_configs(self):
-        n_models = (
-            len([n for n in self.names if n.endswith('_0.pt')])
-            if self.single_fold_proposals
-            else len(self.models)
-        )
-        n_fwd = n_models + 3 * n_models * self.use_tta_proposals
-
-        if n_fwd == 1:
-            nms_pre = 2000
-            max_per_img = 1000
-        elif n_fwd <= 5:
-            nms_pre = 1500
-            max_per_img = 750
-        else:
-            nms_pre = 1000
-            max_per_img = 500
-
-        for model in self.models:
-            model.rpn_head.test_cfg = mmcv.Config(
+        for i in range(3):
+            rpn_cfg = mmcv.Config(
                 dict(
-                    nms_pre=nms_pre,
-                    max_per_img=max_per_img,
-                    nms=dict(type="nms", iou_threshold=self.bbox_iou_threshold),
+                    score_thr=0,
+                    nms_pre=self.config['rpn_nms_pre'][i],
+                    max_per_img=self.config['rpn_max_per_img'][i],
+                    nms=dict(type="nms", iou_threshold=self.config['bbox_iou_threshold'][i]),
                     min_bbox_size=0,
                 )
             )
-            model.roi_head.test_cfg = mmcv.Config({})
+            rcnn_cfg = mmcv.Config(
+                dict(
+                    score_thr=0.25,
+                    nms=dict(type="nms", iou_threshold=self.config['bbox_iou_threshold'][i]),
+                    mask_thr_binary=-1,
+                )
+            )
+            self.rpn_cfgs.append(rpn_cfg)
+            self.rcnn_cfgs.append(rcnn_cfg)
 
     def extract_feat(self, img, img_metas, **kwargs):
-        pass
+        """
+        Extract features function. Features are stored in cpu to save gpu memory.
+
+        Args:
+            imgs (list of torch tensors [n x C x H x W]): Input image.
+            img_metas (list of dicts [n]): List of MMDet image metadata.
+        """
+        features = [
+            [tuple([f_lvl.cpu() for f_lvl in f]) for f in model.extract_feats(img)]
+            for model in self.models
+        ]
+        return features
 
     def simple_test(self, img, img_metas, **kwargs):
+        """
+        Single image test function. Not used but required by MMDet.
+
+        Args:
+            imgs (list of torch tensors [1 x C x H x W]): Input image.
+            img_metas (list of dicts [1]): List of MMDet image metadata.
+        """
         pass
 
     def forward(self, img, img_metas, **kwargs):
+        """
+        Forward function. Calls the aug_test function.
+
+        Args:
+            imgs (list of torch tensors [n_tta x C x H x W]): Input image.
+            img_metas (list of dicts [n_tta]): List of MMDet image metadata.
+
+        Returns:
+            torch tensor [m x 6]: Kept boxes, confidences & labels.
+            torch tensor [m x H x W]: Masks.
+            list of torch tensors [1 x 5]: Proposals.
+            list of torch tensors: Augmented boxes before merging.
+            list of torch tensors: Augmented masks before merging.
+        """
         return self.aug_test(img, img_metas, **kwargs)
 
-    def get_proposals(self, imgs, img_metas):
+    def get_proposals(self, features, img_metas):
+        """
+        Gets proposals. Doesn't use TTA.
+
+        Args:
+            features (list of torch tensors [n_models x n_tta x n_ft]): Encoder / FPN features.
+            img_metas (list of dicts [n_tta]): List of MMDet image metadata.
+
+        Returns:
+            list of torch tensors [1 x 5]: Proposals.
+            int: Cell type.
+        """
+        aug_bboxes, aug_scores = [], []
+        for i, model in enumerate(self.models):
+            for fts, img_meta in zip(features[i][:1], img_metas[:1]):
+                fts = [ft.cuda() for ft in fts]
+                cls_score, bbox_pred = model.rpn_head(fts)
+
+                aug_bboxes.append(bbox_pred)
+                aug_scores.append(cls_score)
+
+        merged_bboxes, merged_scores = [], []
+        level_counts = []
+
+        for lvl in range(len(aug_bboxes[0])):
+            merged_bboxes_lvl = torch.stack([bboxes[lvl] for bboxes in aug_bboxes]).mean(dim=0)
+            merged_scores_lvl = torch.stack([scores[lvl] for scores in aug_scores]).mean(dim=0)
+
+            merged_bboxes.append(merged_bboxes_lvl)
+            merged_scores.append(merged_scores_lvl)
+
+            rpn_scores_lvl, rpn_labels_lvl = torch.max(
+                merged_scores_lvl.sigmoid().flatten(start_dim=2)[0], 0
+            )
+            level_counts.append(rpn_labels_lvl[rpn_scores_lvl > 0.7].size(0))
+
+        if np.sum(level_counts[-2:]) > 10:  # astro
+            cell_type = 1
+        elif np.sum(level_counts) < 4500 and level_counts[1] < 750:  # cort
+            cell_type = 2
+        else:  # shsy5y
+            cell_type = 0
+
+        proposal_list = get_rpn_boxes(
+            self.models[0].rpn_head,
+            merged_scores,
+            merged_bboxes,
+            img_metas[0],
+            self.rpn_cfgs[cell_type]
+        )
+
+        return proposal_list, cell_type
+
+    def get_proposals_tta(self, imgs, img_metas):
         """
         TODO
-        No TTAs are used.
-        TTAs can be used but nms_pre and max_per_img need to be lowered.
+        This doesn't work yet.
 
         Args:
             imgs ([type]): [description]
@@ -108,9 +170,9 @@ class EnsembleModel(BaseDetector):
         Returns:
             [type]: [description]
         """
-        imgs_per_gpu = len(img_metas[0])
-        aug_proposals = [[] for _ in range(imgs_per_gpu)]
-        aug_img_metas = [[] for _ in range(imgs_per_gpu)]
+        raise NotImplementedError
+
+        aug_bboxes, aug_scores, aug_img_metas = {}, {}, {}
 
         for i, model in enumerate(self.models):
 
@@ -119,41 +181,90 @@ class EnsembleModel(BaseDetector):
                     continue
 
             for x, img_meta in zip(model.extract_feats(imgs), img_metas):
-                aug_img_metas.append(img_meta)
+                flip_direction = img_meta[0]["flip_direction"]
 
-                proposal_list = model.rpn_head.simple_test_rpn(x, img_meta)
-                for i, proposals in enumerate(proposal_list):
-                    aug_proposals[i].append(proposals)
-                    aug_img_metas[i] += img_meta
+                cls_score, bbox_pred = model.rpn_head(x)
 
-                if not self.use_tta_proposals:
-                    break
+                try:
+                    aug_bboxes[flip_direction].append(bbox_pred)
+                    aug_scores[flip_direction].append(cls_score)
+                    aug_img_metas[flip_direction].append(img_meta)
+                except KeyError:
+                    aug_bboxes[flip_direction] = [bbox_pred]
+                    aug_scores[flip_direction] = [cls_score]
+                    aug_img_metas[flip_direction] = [img_meta]
 
-        proposal_list = [
-            merge_aug_proposals(proposals, img_meta, self.rpn_cfg)
-            for proposals, img_meta in zip(aug_proposals, aug_img_metas)
-        ]
+        proposals, img_metas_proposals = [], []
+        for flip_direction in aug_bboxes.keys():
+            merged_bboxes, merged_scores = [], []
+            for lvl in range(len(aug_bboxes[flip_direction][0])):
+                merged_bboxes_lvl = torch.stack(
+                    [bboxes[lvl] for bboxes in aug_bboxes[flip_direction]]
+                ).mean(dim=0)
+                merged_scores_lvl = torch.stack(
+                    [scores[lvl] for scores in aug_scores[flip_direction]]
+                ).mean(dim=0)
 
-        return proposal_list, aug_proposals
+                # print(merged_bboxes_lvl.size())
 
-    def get_bboxes(self, imgs, img_metas, proposal_list):
+                # if flip_direction == "horizontal":
+                #     merged_bboxes_lvl = merged_bboxes_lvl.flip([3])
+                #     merged_scores_lvl = merged_scores_lvl.flip([3])
+                # elif flip_direction == "vertical":
+                #     merged_bboxes_lvl = merged_bboxes_lvl.flip([3])
+                #     merged_scores_lvl = merged_scores_lvl.flip([3])
+                # elif flip_direction == "diagonal":
+                #     merged_bboxes_lvl = merged_bboxes_lvl.flip([2, 3])
+                #     merged_scores_lvl = merged_scores_lvl.flip([2, 3])
+
+                merged_bboxes.append(merged_bboxes_lvl)
+                merged_scores.append(merged_scores_lvl)
+
+            proposal_list = self.models[0].rpn_head.get_bboxes(
+                merged_scores, merged_bboxes, aug_img_metas[flip_direction][0]
+            )
+
+            if flip_direction in ["horizontal"]:
+                # print(len(proposal_list), proposal_list[0].size())
+                proposals.append(proposal_list)
+                img_metas_proposals.append(aug_img_metas[flip_direction][0])
+                # print(aug_img_metas[flip_direction][0])
+
+        proposal_list_final = []
+
+        for i in range(len(proposals[0])):
+            # Doesn't work but I could try to use NMS
+            merged_bboxes, merged_scores = merge_aug_bboxes(
+                [p[i][:, :4] for p in proposals],
+                [p[i][:, 4] for p in proposals],
+                img_metas_proposals,
+            )
+            merged_proposal = torch.cat([merged_bboxes, merged_scores.unsqueeze(1)], 1)
+            proposal_list_final.append(merged_proposal)
+
+        return proposal_list_final, (merged_bboxes, merged_scores)
+
+    def get_bboxes(self, features, img_metas, proposal_list, rcnn_cfg):
         """
+        Gets rcnn boxes. Adapted from :
         https://github.com/open-mmlab/mmdetection/blob/bde7b4b7eea9dd6ee91a486c6996b2d68662366d/mmdet/models/roi_heads/test_mixins.py#L139
-        TODO
         All TTAs are used.
 
         Args:
-            imgs ([type]): [description]
-            img_metas ([type]): [description]
-            proposal_list ([type]): [description]
+            features (list of torch tensors [n_models x n_tta x n_ft]): Encoder / FPN features.
+            img_metas (list of dicts [n_tta]): List of MMDet image metadata.
+            proposal_list ([1 x N]): Proposals.
+            rcnn_cfg (mmdet Config): RCNN config.
 
         Returns:
-            [type]: [description]
+            torch tensor [m x 6]: Kept boxes, confidences & labels.
+            list of torch tensors: Augmented boxes before merging.
         """
         aug_bboxes, aug_scores, aug_img_metas = [], [], []
 
-        for wrapper, model in zip(self.wrappers, self.models):
-            for x, img_meta in zip(model.extract_feats(imgs), img_metas):
+        for i, (wrapper, model) in enumerate(zip(self.wrappers, self.models)):
+            for fts, img_meta in zip(features[i], img_metas):
+                fts = [ft.cuda() for ft in fts]
                 img_shape = img_meta[0]["img_shape"]
                 scale_factor = img_meta[0]["scale_factor"]
                 flip = img_meta[0]["flip"]
@@ -169,7 +280,7 @@ class EnsembleModel(BaseDetector):
                 rois = bbox2roi([proposals])
 
                 bboxes, scores = wrapper.get_boxes(
-                    model, x, rois, img_shape, scale_factor, img_meta, self.num_classes
+                    model, fts, rois, img_shape, scale_factor, img_meta, self.config['num_classes']
                 )
 
                 aug_bboxes.append(bboxes)
@@ -177,41 +288,43 @@ class EnsembleModel(BaseDetector):
                 aug_img_metas.append(img_meta)
 
         merged_bboxes, merged_scores = merge_aug_bboxes(
-            aug_bboxes, aug_scores, aug_img_metas, self.rcnn_cfg
+            aug_bboxes, aug_scores, aug_img_metas
         )
 
         det_bboxes, det_labels = single_class_boxes_nms(
             merged_bboxes,
             merged_scores,
-            iou_threshold=self.rcnn_cfg.nms.iou_threshold,
+            iou_threshold=rcnn_cfg.nms.iou_threshold,
         )
 
         det_bboxes = torch.cat([det_bboxes, det_labels.unsqueeze(-1)], -1)
 
-        det_bboxes = det_bboxes[det_bboxes[:, 4] > self.rcnn_cfg.score_thr]
+        det_bboxes = det_bboxes[det_bboxes[:, 4] > rcnn_cfg.score_thr]
 
-        return det_bboxes, merged_bboxes, aug_bboxes
+        return det_bboxes, aug_bboxes
 
-    def get_masks(self, imgs, img_metas, det_bboxes, det_labels):
+    def get_masks(self, features, img_metas, det_bboxes, det_labels):
         """
+        Gets rcnn boxes. Adapted from :
         https://github.com/open-mmlab/mmdetection/blob/bde7b4b7eea9dd6ee91a486c6996b2d68662366d/mmdet/models/roi_heads/test_mixins.py#L282
-        TODO
 
         Only hflip TTA is used.
 
         Args:
-            imgs ([type]): [description]
-            img_metas ([type]): [description]
-            det_bboxes ([type]): [description]
-            det_labels ([type]): [description]
+            features (list of torch tensors [n_models x n_tta x n_ft]): Encoder / FPN features.
+            img_metas (list of dicts [n_tta]): List of MMDet image metadata.
+            det_bboxes (torch tensor [m x 5): Boxes & confidences.
+            det_labels (torch tensor [m]): Labels.
 
         Returns:
-            [type]: [description]
+            torch tensor [m x H x W]: Masks.
+            list of torch tensors: Augmented masks before merging.
         """
         aug_masks, aug_img_metas = [], []
 
-        for wrapper, model in zip(self.wrappers, self.models):
-            for x, img_meta in zip(model.extract_feats(imgs[:2]), img_metas[:2]):
+        for i, (wrapper, model) in enumerate(zip(self.wrappers, self.models)):
+            for fts, img_meta in zip(features[i][:2], img_metas[:2]):
+                fts = [ft.cuda() for ft in fts]
                 img_shape = img_meta[0]["img_shape"]
                 scale_factor = img_meta[0]["scale_factor"]
                 flip = img_meta[0]["flip"]
@@ -222,7 +335,7 @@ class EnsembleModel(BaseDetector):
                 )
                 mask_rois = bbox2roi([_bboxes])
 
-                masks = wrapper.get_masks(model, x, mask_rois, self.num_classes)
+                masks = wrapper.get_masks(model, fts, mask_rois, self.config['num_classes'])
 
                 aug_masks.append(masks)
                 aug_img_metas.append(img_meta)
@@ -234,29 +347,43 @@ class EnsembleModel(BaseDetector):
             else self.models[0].roi_head.mask_head[-1]
         )
 
-        masks = mask_head.get_seg_masks(
+        masks = get_seg_masks(
+            mask_head,
             merged_masks,
             det_bboxes,
             det_labels,
-            self.rcnn_cfg,
+            self.rcnn_cfgs[0],
             img_metas[0][0]["ori_shape"],
             scale_factor=det_bboxes.new_ones(4),
             rescale=False,
             return_per_class=False,
         )
 
-        return masks, merged_masks, aug_masks
+        return masks, aug_masks
 
     def aug_test(self, imgs, img_metas, return_everything=False, **kwargs):
         """
-        Adapted from :
+        Augmented test function. Adapted from :
         https://github.com/open-mmlab/mmdetection/blob/bde7b4b7eea9dd6ee91a486c6996b2d68662366d/mmdet/models/roi_heads/standard_roi_head.py#L268
+
+        Args:
+            imgs (list of torch tensors [n_tta x C x H x W]): Input images.
+            img_metas (list of dicts [n_tta]): List of MMDet image metadata.
+            return_everything (bool, optional): Whether to return more stuff. Defaults to False.
+
+        Returns:
+            torch tensor [m x 6]: Kept boxes, confidences & labels.
+            torch tensor [m x H x W]: Masks.
+            list of torch tensors [1 x 5]: Proposals.
+            list of torch tensors: Augmented boxes before merging.
+            list of torch tensors: Augmented masks before merging.
         """
+        features = self.extract_feat(imgs, img_metas)
 
-        proposal_list, aug_proposals = self.get_proposals(imgs, img_metas)
+        proposal_list, cell_type = self.get_proposals(features, img_metas)
 
-        bboxes, merged_bboxes, aug_bboxes = self.get_bboxes(
-            imgs, img_metas, proposal_list
+        bboxes, aug_bboxes = self.get_bboxes(
+            features, img_metas, proposal_list, self.rcnn_cfgs[cell_type]
         )
 
         assert self.models[0].with_mask
@@ -264,20 +391,12 @@ class EnsembleModel(BaseDetector):
         if bboxes.shape[0] == 0:
             return bboxes, None
 
-        masks, merged_masks, aug_masks = self.get_masks(
-            imgs, img_metas, bboxes[:, :5], bboxes[:, 5].long()
+        masks, aug_masks = self.get_masks(
+            features, img_metas, bboxes[:, :5], bboxes[:, 5].long()
         )
 
         if return_everything:
-            return (bboxes, masks), (
-                proposal_list,
-                aug_proposals,
-                bboxes,
-                merged_bboxes,
-                aug_bboxes,
-                masks,
-                merged_masks,
-                aug_masks,
-            )
+            all_stuff = (proposal_list, aug_bboxes, bboxes, aug_masks, masks)
+            return (bboxes, masks), all_stuff
 
         return (bboxes, masks)

@@ -14,8 +14,20 @@ from utils.torch import load_model_weights
 from inference.predict import predict
 
 
-def inference_val(df, configs, weights, use_tta=False):
+def inference_val(df, configs, weights, ens_config):
+    """
+    Inference on the validation data.
 
+    Args:
+        df (pandas DataFrame): Metadata.
+        configs (list of Config): Model configs.
+        weights (list of list of strings): Model weights.
+        ens_config (dict): Parameters for the ensemble model.
+
+    Returns:
+        list of tuples: Results in the MMDet format [(boxes, masks), ...].
+        list of pandas DataFrame: Validation DataFrames.
+    """
     pipelines = define_pipelines(configs[0].data_config)
 
     models = []
@@ -23,7 +35,7 @@ def inference_val(df, configs, weights, use_tta=False):
         model = define_model(config.model_config, encoder=config.encoder, verbose=0)
         models.append(model)
 
-    splits = get_splits(df, config)
+    splits = get_splits(df, configs[0])
 
     all_results, dfs = [], []
     for i, (train_idx, val_idx) in enumerate(splits):
@@ -31,7 +43,7 @@ def inference_val(df, configs, weights, use_tta=False):
         dfs.append(df_val)
 
         dataset = SartoriusDataset(
-            df_val, transforms=pipelines['test_tta'] if use_tta else pipelines['test']
+            df_val, transforms=pipelines['test_tta'] if ens_config['use_tta'] else pipelines['test']
         )
 
         models_trained, names = [], []
@@ -44,10 +56,8 @@ def inference_val(df, configs, weights, use_tta=False):
         model = MMDataParallel(
             EnsembleModel(
                 models_trained,
-                use_tta=use_tta,
+                ens_config,
                 names=names,
-                use_tta_proposals=False,
-                single_fold_proposals=False
             )
         )
 
@@ -60,7 +70,22 @@ def inference_val(df, configs, weights, use_tta=False):
     return all_results, dfs
 
 
-def inference_single(df, configs, weights, idx=0, use_tta=False):
+def inference_single(df, configs, weights, ens_config, idx=0):
+    """
+    Inference on a single image from the first fold..
+
+    Args:
+        df (pandas DataFrame): Metadata.
+        configs (list of Config): Model configs.
+        weights (list of list of strings): Model weights.
+        ens_config (dict): Parameters for the ensemble model.
+        idx (int, optional): Image index.
+
+    Returns:
+        list of tuples: Results in the MMDet format [(boxes, masks), ...].
+        tuple: Intermediate outputs from the model.
+        list of pandas DataFrame: Validation DataFrames.
+    """
     pipelines = define_pipelines(configs[0].data_config)
 
     models = []
@@ -68,7 +93,7 @@ def inference_single(df, configs, weights, idx=0, use_tta=False):
         model = define_model(config.model_config, encoder=config.encoder, verbose=0)
         models.append(model)
 
-    splits = get_splits(df, config)
+    splits = get_splits(df, configs[0])
 
     for i, (train_idx, val_idx) in enumerate(splits):
         df_val = df.iloc[val_idx].copy().reset_index(drop=True)
@@ -84,16 +109,14 @@ def inference_single(df, configs, weights, idx=0, use_tta=False):
         model = MMDataParallel(
             EnsembleModel(
                 models_trained,
-                use_tta=use_tta,
+                ens_config,
                 names=names,
-                use_tta_proposals=False,
-                single_fold_proposals=False
             )
         )
 
         dataset = SartoriusDataset(
             df,
-            transforms=pipelines['test_tta'] if use_tta else pipelines['test'],
+            transforms=pipelines['test_tta'] if ens_config['use_tta'] else pipelines['test'],
         )
 
         # predict

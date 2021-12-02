@@ -3,7 +3,6 @@ import time
 import torch
 import traceback
 import numpy as np
-from tqdm.notebook import tqdm  # noqa
 
 from data.loader import define_loaders
 from training.optim import define_optimizer, define_scheduler
@@ -34,33 +33,33 @@ def fit(
     device="cuda",
 ):
     """
-    Usual torch fit function.
-    TODO
+    Training function.
 
     Args:
-        model (torch model): Model to train.
-        dataset (InMemoryTrainDataset): Dataset.
-        optimizer_name (str, optional): Optimizer name. Defaults to 'adam'.
-        activations (str, optional): Activation functions. Defaults to 'sigmoid'.
+        model (torch Model): Model to train.
+        train_dataset (SartoriusDataset): Training dataset.
+        val_dataset (SartoriusDataset): Validation dataset.
+        predict_dataset (SartoriusDataset): Validation dataset for prediction.
+        optimizer_name (str, optional): Optimizer name. Defaults to "Adam".
+        scheduler_name (str, optional): Scheduler name. Defaults to "linear".
         epochs (int, optional): Number of epochs. Defaults to 50.
         batch_size (int, optional): Training batch size. Defaults to 32.
         val_bs (int, optional): Validation batch size. Defaults to 32.
         warmup_prop (float, optional): Warmup proportion. Defaults to 0.1.
         lr (float, optional): Learning rate. Defaults to 1e-3.
-        mix_proba (float, optional): Probability to apply mixup with. Defaults to 0.
-        mix_alpha (float, optional): Mixup alpha parameter. Defaults to 0.4.
-        verbose (int, optional): Period (in epochs) to display logs at. Defaults to 1.
-        first_epoch_eval (int, optional): Epoch to start evaluating at. Defaults to 0.
-        num_classes (int, optional): Number of classes. Defaults to 1.
-        device (str, optional): Device for torch. Defaults to "cuda".
+        weight_decay (int, optional): Weight decay. Defaults to 0.
+        verbose (int, optional): Epoch proportion to display logs at. Defaults to 1.
+        verbose_eval (int, optional): Epoch proportion to validate at. Defaults to 5.
+        first_epoch_eval (int, optional): Epoch to start validating at. Defaults to 0.
+        compute_val_loss (bool, optional): Whether to compute the validation loss. Defaults to True.
+        num_classes (int, optional): Number of classes. Defaults to 3.
+        use_extra_samples (bool, optional): Whether to use extra samples. Defaults to False.
+        device (str, optional): Training device. Defaults to "cuda".
 
     Returns:
-        numpy array [len(val_dataset) x num_classes]: Last prediction on the validation data.
-        pandas dataframe: Training history.
+        list of tuples: Results in the MMDet format [(boxes, masks), ...].
     """
     dt = 0.
-
-    scaler = torch.cuda.amp.GradScaler()
 
     optimizer = define_optimizer(
         optimizer_name, model, lr=lr, weight_decay=weight_decay
@@ -79,8 +78,6 @@ def fit(
     num_training_steps = (
         len(train_dataset.img_paths) * epochs + np.sum(extra_scheduling)
     ) // batch_size
-    # num_training_steps = int(epochs * len(train_loader))
-
     num_warmup_steps = int(warmup_prop * num_training_steps)
     scheduler = define_scheduler(scheduler_name, optimizer, num_warmup_steps, num_training_steps)
 
@@ -92,34 +89,16 @@ def fit(
         avg_loss = 0
 
         for batch in train_loader:
-            if use_fp16:  # TODO
-                with torch.cuda.amp.autocast():
-                    losses = model(**batch, return_loss=True)
-                    loss, _ = model.module._parse_losses(losses)
+            losses = model(**batch, return_loss=True)
+            loss, _ = model.module._parse_losses(losses)
 
-                    scaler.scale(loss).backward()
-                    avg_loss += loss.item() / len(train_loader)
+            loss.backward()
+            avg_loss += loss.item() / len(train_loader)
 
-                    # TODO : grad clip
-                    scaler.step(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 10.)
 
-                    scale = scaler.get_scale()
-                    scaler.update()
-
-                    if scale == scaler.get_scale():
-                        scheduler.step()
-
-            else:
-                losses = model(**batch, return_loss=True)
-                loss, _ = model.module._parse_losses(losses)
-
-                loss.backward()
-                avg_loss += loss.item() / len(train_loader)
-
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 10.)
-
-                optimizer.step()
-                scheduler.step()
+            optimizer.step()
+            scheduler.step()
 
             for param in model.parameters():
                 param.grad = None

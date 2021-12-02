@@ -5,23 +5,16 @@ from mmdet.core.bbox import bbox_mapping_back
 
 
 def merge_aug_proposals(aug_proposals, img_metas, cfg):
-    """Merge augmented proposals (multiscale, flip, etc.)
+    """
+    Merges proposals.
 
     Args:
-        aug_proposals (list[Tensor]): proposals from different testing
-            schemes, shape (n, 5). Note that they are not rescaled to the
-            original image size.
-
-        img_metas (list[dict]): list of image info dict where each dict has:
-            'img_shape', 'scale_factor', 'flip', and may also contain
-            'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'.
-            For details on the values of these keys see
-            `mmdet/datasets/pipelines/formatting.py:Collect`.
-
-        cfg (dict): rpn test config.
+        aug_proposals (list of tensors [k x n x 5]): Proposals from different testing schemes.
+        img_metas (list of dicts [k]): List of mmdet image metadata.
+        cfg (dict): RPN config.
 
     Returns:
-        Tensor: shape (n, 4), proposals corresponding to original image scale.
+        tensor [m x 5]: Merged proposals.
     """
     # Recover augmented proposals
     recovered_proposals = []
@@ -57,20 +50,21 @@ def merge_aug_proposals(aug_proposals, img_metas, cfg):
     return merged_proposals
 
 
-def merge_aug_bboxes(aug_bboxes, aug_scores, img_metas, rcnn_test_cfg):
+def merge_aug_bboxes(aug_bboxes, aug_scores, img_metas):
     """
     Merge augmented detection bboxes and scores.
     This simply takes the mean.
 
     Args:
-        aug_bboxes (list[Tensor]): shape (n, 4*#class)
-        aug_scores (list[Tensor] or None): shape (n, #class)
-        img_shapes (list[Tensor]): shape (3, ).
-        rcnn_test_cfg (dict): rcnn test config.
+        aug_bboxes (list of torch tensors [k x n x 4]): Boxes.
+        aug_scores (list of torch tensors [k x n]): Confidences.
+        img_metas (list of dicts [k]): List of mmdet image metadata.
 
     Returns:
-        tuple: (bboxes, scores)
+        torch tensor [n x 4]: Merged boxes.
+        torch tensor [n]: Merged scores
     """
+
     # Recover augmented proposals
     recovered_bboxes = []
     for bboxes, img_info in zip(aug_bboxes, img_metas):
@@ -87,13 +81,25 @@ def merge_aug_bboxes(aug_bboxes, aug_scores, img_metas, rcnn_test_cfg):
     bboxes = torch.stack(recovered_bboxes).mean(dim=0)
 
     if aug_scores is None:
-        return bboxes
+        return bboxes, None
     else:
         scores = torch.stack(aug_scores).mean(dim=0)
         return bboxes, scores
 
 
 def single_class_boxes_nms(merged_bboxes, merged_scores, iou_threshold=0.5):
+    """
+    NMS for boxes but considering all classes at once.
+
+    Args:
+        merged_bboxes (torch tensor [n x 4]): Merged boxes.
+        merged_scores (torch tensor [n]): Merged scores.
+        iou_threshold (float, optional): Threshold of IoU. Defaults to 0.5.
+
+    Returns:
+        torch tensor [m x 5]: Kept boxes & confidences.
+        torch tensor [m]: Labels of kept boxes.
+    """
     # Use most confident class per candidate
     det_scores, det_labels = torch.max(merged_scores, 1)
 

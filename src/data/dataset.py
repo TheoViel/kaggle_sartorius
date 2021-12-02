@@ -32,14 +32,13 @@ class SartoriusDataset(Dataset):
     def __init__(self, df, transforms, precompute_masks=True, df_extra=None):
         """
         Constructor.
-        TODO
 
         Args:
-            df (pandas dataframe): Metadata.
-            transforms (albumentation transforms, optional): Transforms to apply. Defaults to None.
-            train (bool, optional): Indicates if the dataset is used for training. Defaults to True.
+            df (pandas DataFrame): Metadata.
+            transforms (MMDet transforms): Augmentation pipeline to apply.
+            precompute_masks (bool, optional): Whether to precompute masks. Defaults to True.
+            df_extra (pandas DataFrame, optional): Extra data for training. Defaults to None.
         """
-
         self.df = df
         self.transforms = transforms
 
@@ -63,6 +62,13 @@ class SartoriusDataset(Dataset):
         self.sample_extra_data(0)
 
     def sample_extra_data(self, n=None):
+        """
+        Samples data from the external dataset.
+        Use self.n_extra_samples if n is None.
+
+        Args:
+            n (int, optional): Number of images to sample. Defaults to None.
+        """
         if n is None:
             n = self.n_extra_samples
 
@@ -83,6 +89,16 @@ class SartoriusDataset(Dataset):
         return self.df.shape[0] + self.n_extra_samples
 
     def __getitem__(self, idx):
+        """
+        Item accessor.
+        Will sample in df_extra if idx > len(df).
+
+        Args:
+            idx (int): Sample index.
+
+        Returns:
+            dict: Dictionary in the MMDet format.
+        """
         if idx < len(self.df):
             path = self.img_paths[idx]
             boxes = self.boxes[idx]
@@ -126,21 +142,27 @@ class SartoriusDataset(Dataset):
                 results['scale_factor'] = 1.
                 results_transfo = self.transforms(results.copy())
 
-        # try:
-        #     results_transfo['gt_semantic_seg'] = results_transfo['gt_masks'].masks.max(0)
-        # except AttributeError:
-        #     results_transfo['gt_semantic_seg'] = results_transfo['gt_masks'].data.masks.max(0)
-
         return results_transfo
 
     def _load_masks(self, mask, shape):
+        """
+        Loads masks from encodings.
+
+        Args:
+            mask (list): Mask encodings.
+            shape (tuple): mask shape
+
+        Returns:
+            BitmapMasks: Masks in the format adapted to MMDt.
+        """
         h, w = shape
         return BitmapMasks([pycocotools.mask.decode(m) for m in mask], h, w)
 
 
 class SartoriusInferenceDataset(Dataset):
     """
-    Segmentation dataset for training / validation.
+    Segmentation dataset for inference.
+    TODO
     """
     def __init__(self, df, transforms, precompute_masks=True):
         """

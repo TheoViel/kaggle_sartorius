@@ -19,7 +19,6 @@ class Logger(object):
     """
     Simple logger that saves what is printed in a file
     """
-
     def __init__(self, *files):
         self.files = files
 
@@ -85,10 +84,7 @@ def save_config(config, folder):
 
     Args:
         config (Config): Config.
-        path (str): Path to save at.
-
-    Returns:
-        pandas dataframe: Config as a dataframe
+        folder (str): Folder to save at.
     """
     data_config_file = folder + config.data_config.split('/')[-1]
     model_config_file = folder + config.model_config.split('/')[-1]

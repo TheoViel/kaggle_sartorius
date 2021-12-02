@@ -10,6 +10,18 @@ from mmdet.models.builder import build_detector
 
 
 def define_model(config_file, encoder="resnet50", pretrained_livecell=False, verbose=1):
+    """
+    Defines a model.
+
+    Args:
+        config_file (str): Path to the model config.
+        encoder (str, optional): Encoder name. Defaults to "resnet50".
+        pretrained_livecell (bool, optional): Whether to use pretrained weights. Defaults to False.
+        verbose (int, optional): Quantity of info to display (0, 1, 2). Defaults to 1.
+
+    Returns:
+        mmdet MMDataParallel: Model.
+    """
     # Configs
     cfg = mmcv.Config.fromfile(config_file)
 
@@ -17,7 +29,7 @@ def define_model(config_file, encoder="resnet50", pretrained_livecell=False, ver
     cfg_backbones = mmcv.Config.fromfile(config_backbone_file)
     cfg.model.backbone = cfg_backbones.backbones[encoder]
 
-    if "swin" in encoder:  # update neck channels
+    if encoder in cfg_backbones.out_channels.keys():  # update neck channels
         cfg.model.neck.in_channels = cfg_backbones.out_channels[encoder]
 
     # Build model
@@ -28,15 +40,20 @@ def define_model(config_file, encoder="resnet50", pretrained_livecell=False, ver
     # Reduce stride
     if "resnet" in encoder or "resnext" in encoder:
         model.backbone.conv1.stride = (1, 1)
+    elif "efficientnet" in encoder:
+        model.backbone.effnet.conv_stem.stride = (1, 1)
 
     model = MMDataParallel(model)
 
     # Weights
-    weights = (
-        cfg.pretrained_weights_livecell[encoder]
-        if pretrained_livecell
-        else cfg.pretrained_weights[encoder]
-    )
+    try:
+        weights = (
+            cfg.pretrained_weights_livecell[encoder]
+            if pretrained_livecell
+            else cfg.pretrained_weights[encoder]
+        )
+    except KeyError:
+        weights = None
 
     model = load_pretrained_weights(
         model,
@@ -49,6 +66,18 @@ def define_model(config_file, encoder="resnet50", pretrained_livecell=False, ver
 
 
 def load_pretrained_weights(model, weights, verbose=0, adapt_swin=False):
+    """
+    Custom weights loading function
+
+    Args:
+        model (mmdet MMDataParallel): Model.
+        weights (str): Path to the weights.
+        verbose (int, optional): Quantity of info to display (0, 1, 2). Defaults to 0.
+        adapt_swin (bool, optional): Whether to adapt swin weights. Defaults to False.
+
+    Returns:
+        mmdet MMDataParallel: Model with pretrained weights.
+    """
     if verbose < 2:
         logging.disable(sys.maxsize)
 
@@ -93,6 +122,15 @@ def load_pretrained_weights(model, weights, verbose=0, adapt_swin=False):
 
 
 def adapt_swin_weights(w):
+    """
+    Adapts weights for swin transformers.
+
+    Args:
+        w (OrderedDict): Weights.
+
+    Returns:
+        OrderedDict: Adapted weights.
+    """
     new_w = OrderedDict()
 
     for k in w:

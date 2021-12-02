@@ -7,6 +7,7 @@ NUM_WORKERS = 0
 
 DATA_PATH = "../input/"
 TRAIN_IMG_PATH = DATA_PATH + "train/"
+HCK_FIX_PATH = DATA_PATH + "hck_fix/"
 
 LOG_PATH = "../logs/"
 OUT_PATH = "../output/"
