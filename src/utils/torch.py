@@ -85,6 +85,6 @@ def worker_init_fn(worker_id):
     Handles PyTorch x Numpy seeding issues.
 
     Args:
-        worker_id (int]): Id of the worker.
+        worker_id (int): Id of the worker.
     """
     np.random.seed(np.random.get_state()[1][0] + worker_id)

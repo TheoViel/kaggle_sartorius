@@ -1,3 +1,5 @@
+from sklearn.model_selection import StratifiedKFold
+
 from model_zoo.models import define_model
 from training.train import fit
 
@@ -12,19 +14,20 @@ def train(
     config, df_train, df_val, pipelines, fold, log_folder=None, precompute_masks=True, df_extra=None
 ):
     """
-    Trains a model.
-    TODO
+    Trains a model
 
     Args:
-        config (Config): Parameters.
-        dataset (torch Dataset): whole dataset InMemory
-        fold (int): Selected fold.
-        log_folder (None or str, optional): Folder to logs results to. Defaults to None.
+        config (Config): Config.
+        df_train (pandas DataFrame): Training metadata.
+        df_val (pandas DataFrame): Validation metadata.
+        pipelines (dict): Augmentation pipelines.
+        fold (int): Fold number.
+        log_folder (str, optional): Folder to log results to. Defaults to None.
+        precompute_masks (bool, optional): Whether to precompute masks. Defaults to True.
+        df_extra (pandas DataFrame, optional): Extra metadata. Defaults to None.
 
     Returns:
-        SegmentationMeter: Meter.
-        pandas dataframe: Training history.
-        torch model: Trained segmentation model.
+        list of tuples: Results in the MMDet format [(boxes, masks), ...].
     """
     seed_everything(config.seed)
 
@@ -78,7 +81,6 @@ def train(
         first_epoch_eval=config.first_epoch_eval,
         compute_val_loss=config.compute_val_loss,
         num_classes=config.num_classes,
-        use_fp16=config.use_fp16,
         use_extra_samples=config.use_extra_samples,
         device=config.device,
     )
@@ -93,13 +95,14 @@ def train(
 def k_fold(config, log_folder=None):
     """
     Performs a  k-fold cross validation.
-    TODO
 
     Args:
         config (Config): Parameters.
         log_folder (None or str, optional): Folder to logs results to. Defaults to None.
-    """
 
+    Returns:
+        list of tuples: Results in the MMDet format [(boxes, masks), ...].
+    """
     df = prepare_data(fix=False, remove_anomalies=config.remove_anomalies)
     df_fix = prepare_data(fix=True, remove_anomalies=config.remove_anomalies)
 
@@ -134,3 +137,29 @@ def k_fold(config, log_folder=None):
                 return results
 
     return all_results
+
+
+def pretrain(config, log_folder=None):
+    """
+    Pretrains a model.
+
+    Args:
+        config (Config): Parameters.
+        log_folder (None or str, optional): Folder to logs results to. Defaults to None.
+    """
+    df = prepare_extra_data(name="livecell")
+
+    skf = StratifiedKFold(n_splits=config.k, shuffle=True, random_state=config.random_state)
+    splits = list(skf.split(X=df, y=df["cell_type"]))
+
+    for i, (train_idx, val_idx) in enumerate(splits):
+        df_train = df.iloc[train_idx].copy().reset_index(drop=True)
+        df_val = df.iloc[val_idx].copy().reset_index(drop=True)
+
+        pipelines = define_pipelines(config.data_config)
+
+        results = train(
+            config, df_train, df_val, pipelines, i, log_folder=log_folder, precompute_masks=False
+        )
+
+        return results

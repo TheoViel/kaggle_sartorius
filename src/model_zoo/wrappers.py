@@ -3,6 +3,18 @@ import torch.functional as F
 
 
 def get_wrappers(names):
+    """
+    Returns the associated wrappers.
+
+    Args:
+        names (list of strings): Model names.
+
+    Raises:
+        NotImplementedError: Unsupported model name.
+
+    Returns:
+        list of classes: Wrappers.
+    """
     wrappers = []
     for name in names:
         if "rcnn" in name:
@@ -17,7 +29,47 @@ def get_wrappers(names):
     return wrappers
 
 
-class RCNNEnsemble:
+class Wrapper:
+    @staticmethod
+    def get_boxes(model, x, rois, img_shape, scale_factor, img_meta, num_classes):
+        """
+        Gets rcnn boxes. Expects to be redefined in children classes.
+
+        Args:
+            model (mmdet Model): Model.
+            x (list of tensor): Encoder / FPN features.
+            rois (list): Rois associated to proposals.
+            img_shape (tuple): Image shape
+            scale_factor (float or tensor): Scale factor.
+            img_meta (list of dicts [n_tta]): List of MMDet image metadata.
+            num_classes (int): Number of classes
+
+        Raises:
+            NotImplementedError: get_boxes is not implemented for this model.
+        """
+        raise NotImplementedError
+
+    @staticmethod
+    def get_masks(model, x, mask_rois, num_classes):
+        """
+        Gets rcnn masks. Expects to be redefined in children classes.
+
+        Args:
+            model (mmdet Model): Model.
+            x (list of tensor): Encoder / FPN features.
+            mask_rois (list): Rois associated to boxes.
+            num_classes (int): Number of classes
+
+        Raises:
+            NotImplementedError: get_masks is not implemented for this model.
+        """
+        raise NotImplementedError
+
+
+class RCNNEnsemble(Wrapper):
+    """
+    Wrapper for MaskRCNN models.
+    """
     @staticmethod
     def get_boxes(model, x, rois, img_shape, scale_factor, img_meta, num_classes):
         bbox_results = model.roi_head._bbox_forward(x, rois)
@@ -50,7 +102,10 @@ class RCNNEnsemble:
         return masks
 
 
-class CascadeEnsemble:
+class CascadeEnsemble(Wrapper):
+    """
+    Wrapper for Cascade MaskRCNN models.
+    """
     @staticmethod
     def get_boxes(model, x, rois, img_shape, scale_factor, img_meta, num_classes):
         # https://github.com/open-mmlab/mmdetection/blob/bde7b4b7eea9dd6ee91a486c6996b2d68662366d/mmdet/models/roi_heads/test_mixins.py#L139
@@ -99,7 +154,10 @@ class CascadeEnsemble:
         return masks
 
 
-class HTCEnsemble:
+class HTCEnsemble(Wrapper):
+    """
+    Wrapper for HTC models.
+    """
     @staticmethod
     def get_boxes(model, x, rois, img_shape, scale_factor, img_meta, num_classes):
         # https://github.com/open-mmlab/mmdetection/blob/a7a16afbf2a4bdb4d023094da73d325cb864838b/mmdet/models/roi_heads/htc_roi_head.py#L505

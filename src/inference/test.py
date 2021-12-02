@@ -1,3 +1,5 @@
+# OUTDATED
+
 from inference.predict import predict
 from data.dataset import SartoriusInferenceDataset
 from data.transforms import define_pipelines

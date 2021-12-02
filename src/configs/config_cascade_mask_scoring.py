@@ -1,7 +1,8 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/models/mask_rcnn_r50_fpn.py
 
 custom_imports = dict(
-    imports=['model_zoo.cascade_mask_scoring']
+    imports=['model_zoo.cascade_mask_scoring'],
+    allow_failed_imports=True
 )
 
 num_classes = 3  # 8

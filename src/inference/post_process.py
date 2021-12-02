@@ -6,29 +6,54 @@ import pycocotools
 from tqdm.notebook import tqdm
 
 
-def efficient_concat(masks, lens=None):
-    if lens is None:
-        lens = np.array([len(m) for m in masks])
+def efficient_concat(arrays):
+    """
+    Efficient concatenate function.
+    Adapted to the case where one array is much longer than the others.
+    Thhis function changes the order by concatenating by decreasing length.
+
+    Args:
+        arrays (list of np arrays): Arrays to concatenate.
+
+    Returns:
+        np array: Concatenated array.
+        np array: Order the arrays were concatenated in.
+    """
+    lens = np.array([len(m) for m in arrays])
     order = np.argsort(lens)[::-1]
     lens = lens[order]
 
-    mask = masks[order[0]]
-    end = mask.shape[0]
+    array = arrays[order[0]]
+    end = array.shape[0]
 
     pad_len = lens[1:].sum()
     if not pad_len:
-        return mask, order
+        return array, order
 
-    mask = np.pad(mask, ((0, pad_len), (0, 0), (0, 0)))
+    array = np.pad(array, ((0, pad_len), (0, 0), (0, 0)))
 
     for idx, length in zip(order[1:], lens[1:]):
-        mask[end: end + length] = masks[idx]
+        array[end: end + length] = arrays[idx]
         end += length
 
-    return mask, order
+    return array, order
 
 
 def quick_post_process_preds(result, thresh_conf=0.5, thresh_mask=0.5, num_classes=3):
+    """
+    Quick post-processing function for MMDet results.
+
+    Args:
+        result (tuple): MMDet results (boxes, masks).
+        thresh_conf (float, optional): Confidence threshold. Defaults to 0.5.
+        thresh_mask (float, optional): Mask threshold. Defaults to 0.5.
+        num_classes (int, optional): Number of classes. Defaults to 3.
+
+    Returns:
+        np array [n x H x W]: Masks.
+        np array [n x 5]: Boxes & confidences.
+        int: Cell type index.
+    """
     masks, boxes = [], []
 
     lens = [len(boxes_c) for boxes_c, masks_c in zip(result[0], result[1])][:num_classes]
@@ -57,6 +82,17 @@ def quick_post_process_preds(result, thresh_conf=0.5, thresh_mask=0.5, num_class
 
 
 def remove_overlap_naive(masks, ious=None):
+    """
+    Removes the overlap between cells.
+    The cell i has its intersection with the all the k < i cells removed.
+
+    Args:
+        masks (np array [n x H x W]): Masks.
+        ious (np array, optional): Precomputed ious between cells. Defaults to None.
+
+    Returns:
+        np array [n x H x W]: Processed masks.
+    """
     if ious is None:
         rles = [pycocotools.mask.encode(np.asarray(m, order='F')) for m in masks]
         ious = pycocotools.mask.iou(rles, rles, [0] * len(rles))
@@ -83,19 +119,18 @@ def remove_overlap_naive(masks, ious=None):
 
 def mask_nms(masks, boxes, threshold=0.5):
     """
-    NMS with masks.
-    Removes more masks than the tweaking fct.
+    Non-maximum suppression with masks.
 
     Args:
-        masks ([type]): [description]
-        boxes ([type]): [description]
-        threshold (float, optional): [description]. Defaults to 0.5.
+        masks (np array [n x H x W]): Masks.
+        boxes (np array [n x 5]): Boxes & confidences.
+        threshold (float, optional): IoU threshold. Defaults to 0.5.
 
     Returns:
-        [type]: [description]
+        np array [m x H x W]: Kept masks.
+        np array [m x 5]: Kept boxes.
+        list [m]: Kept indices.
     """
-    # assert list(np.argsort(boxes[:, 4])[::-1]) == list(range(len(boxes)))
-
     order = np.argsort(boxes[:, 4])[::-1]
     masks = masks[order]
     boxes = boxes[order]
@@ -105,13 +140,10 @@ def mask_nms(masks, boxes, threshold=0.5):
 
     picks = []
     idxs = list(range(len(ious)))
-    # removed = []
 
     while len(idxs) > 0:
         idx = idxs[0]
         overlapping = np.where(ious[idx] > threshold)[0]
-
-        # removed += [v for v in overlapping if v > idx]
 
         if len(overlapping):
             picks.append(idx)
@@ -124,41 +156,55 @@ def mask_nms(masks, boxes, threshold=0.5):
     return masks, boxes, picks
 
 
-def mask_nms_multithresh(masks, boxes, thresholds=[0.5], ious=None):
-    assert thresholds == sorted(thresholds)
+def corrupt_mask(mask, draw_contours=False):
+    """
+    Corrupts a mask in the same fashion the annotations are corrupted :
+    mask -> contour -> fill poly.
 
-    if thresholds == [0]:
-        return [range(len(boxes))]
+    Args:
+        mask (np array [H x W]): Mask.
+        draw_contours (bool, optional): Whether to draw contours for viz. Defaults to False.
 
-    # Compute ious
-    if ious is None:
-        rle_pred = [pycocotools.mask.encode(np.asarray(m, order='F')) for m in masks]
-        ious = pycocotools.mask.iou(rle_pred, rle_pred, [0] * len(rle_pred))
+    Returns:
+        np array [H x W]: Corrupted mask.
+        np array [H x W] or None: Drawn contours.
+    """
+    contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    all_idxs = [list(range(len(ious))) for _ in range(len(thresholds))]
-    picks = [[] for _ in thresholds]
+    if draw_contours:
+        img_contours = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
+        img_contours = cv2.drawContours(img_contours, contours, -1, (255, 255, 255), 1)[:, :, 0]
+    else:
+        img_contours = None
 
-    # NMS
-    for idx in range(len(ious)):
-        if not any([idx in all_idx for all_idx in all_idxs]):
-            continue
+    corrupted_mask = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
 
-        overlappings = [np.where(ious[idx] > t)[0] for t in thresholds]  # overlaps for current idx
+    for c in contours:
+        corrupted_mask = cv2.fillConvexPoly(corrupted_mask, points=c, color=(1, 1, 1))
+    corrupted_mask = corrupted_mask[:, :, 0].astype(mask.dtype)
 
-        for i, overlapping in enumerate(overlappings):  # update masks to remove
-            if idx in all_idxs[i]:
-                if len(overlapping):
-                    picks[i].append(idx)
-                    all_idxs[i] = [j for j in all_idxs[i] if j not in overlapping]
-                else:
-                    all_idxs[i] = all_idxs[i][1:]
-
-    return picks
+    return corrupted_mask, img_contours
 
 
 def process_results(
-    results, thresholds_mask, thresholds_nms, thresholds_conf, remove_overlap=True, corrupt=False
+    results, thresholds_mask, thresholds_nms, thresholds_conf, remove_overlap=True, corrupt=True
 ):
+    """
+    Complete results processing function.
+
+    Args:
+        results (list of tuples [n]): Results in the MMDet format [(boxes, masks), ...].
+        thresholds_mask (list of float [3]): Thresholds per class for masks.
+        thresholds_nms (list of float [3]): Thresholds per class for nms.
+        thresholds_conf (list of float [3]): Thresholds per class for confidence.
+        remove_overlap (bool, optional): Whether to remove overlap. Defaults to True.
+        corrupt (bool, optional): Whether to corrupt astro masks. Defaults to True.
+
+    Returns:
+        list of np arrays [n]: Masks.
+        list of np arrays [n]: Boxes.
+        list of ints [n]: Cell types.
+    """
     all_masks, all_boxes, cell_types = [], [], []
 
     for result in tqdm(results):
@@ -202,31 +248,15 @@ def process_results(
         if thresh_nms > 0:
             masks, boxes, _ = mask_nms(masks, boxes, thresh_nms)
 
+        # Corrupt
+        if corrupt and cell == 1:  # astro
+            masks = np.array([corrupt_mask(mask)[0] for mask in masks])
+
         # Remove overlap
         if remove_overlap:
             masks = remove_overlap_naive(masks)
-
-        # Corrupt
-        if corrupt and cell == 1:  # astro
-            masks = np.array([degrade_mask(mask) for mask in masks])
 
         all_masks.append(masks)
         all_boxes.append(boxes)
 
     return all_masks, all_boxes, cell_types
-
-
-def degrade_mask(mask):
-    cont, hier = cv2.findContours(mask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    img_cont = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
-    img_cont = cv2.drawContours(img_cont, cont, -1, (255, 255, 255), 1)
-    img_cont = img_cont[:, :, 0]
-
-    conv_mask = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
-
-    for c in cont:
-        conv_mask = cv2.fillConvexPoly(conv_mask, points=c, color=(255, 255, 255))
-    conv_mask = (conv_mask[:, :, 0] > 0).astype(np.uint8)
-
-    return conv_mask, img_cont

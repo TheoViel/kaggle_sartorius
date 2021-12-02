@@ -10,14 +10,14 @@ def define_loaders(
     train_dataset=None, val_dataset=None,  batch_size=32, val_bs=32, num_workers=NUM_WORKERS
 ):
     """
-    Builds data loaders. TODO
+    Builds data loaders.
 
     Args:
-        train_dataset (CollageingDataset): Dataset to train with.
-        val_dataset (CollageingDataset): Dataset to validate with.
-        samples_per_patient (int, optional): Number of images to use per patient. Defaults to 0.
+        train_dataset (torch Dataset): Dataset to train with.
+        val_dataset (torch Dataset): Dataset to validate with.
         batch_size (int, optional): Training batch size. Defaults to 32.
         val_bs (int, optional): Validation batch size. Defaults to 32.
+        num_workers (int, optional): Number of workers. Defaults to NUM_WORKERS.
 
     Returns:
        DataLoader: Train loader.

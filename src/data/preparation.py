@@ -10,6 +10,16 @@ WRONG_ANNOTATIONS = ["03b27b381a5f", "e92c56871769", "eec79772cb99"]
 
 
 def prepare_data(fix=False, remove_anomalies=False):
+    """
+    Prepares the data for training and validation.
+
+    Args:
+        fix (bool, optional): Whether to used fixed masks. Defaults to False.
+        remove_anomalies (bool, optional): Whether to remove abnormal masks. Defaults to False.
+
+    Returns:
+        pandas DataFrame: metadata.
+    """
     df = pd.read_csv(DATA_PATH + "train.csv")
     df = df.groupby('id').agg(list).reset_index()
     for col in df.columns[2:]:
@@ -37,6 +47,15 @@ def prepare_data(fix=False, remove_anomalies=False):
 
 
 def prepare_extra_data(name):
+    """
+    Prepares the livecell data.
+
+    Args:
+        name (str): Name of the csv file.
+
+    Returns:
+        pandas DataFrame: metadata.
+    """
     df = pd.read_csv(OUT_PATH + name + ".csv")
 
     df['split'] = df['split'].apply(
@@ -55,6 +74,18 @@ def prepare_extra_data(name):
 
 
 def get_splits(df, config):
+    """
+    Computes the splits.
+    Supports StratifiedKFold and StratifiedGroupKFold.
+    Stratification is made per cell type, groups are made per sample id.
+
+    Args:
+        df (pandas DataFrame): Data to split.
+        config (Config): Config that contains the split parameters.
+
+    Returns:
+        list: Splits as returned by the sklearn functions.
+    """
     if config.split == "skf":
         skf = StratifiedKFold(
             n_splits=config.k, shuffle=True, random_state=config.random_state

@@ -3,10 +3,67 @@ import numpy as np
 from tqdm.notebook import tqdm
 
 from utils.metrics import iou_map
-from inference.post_process import remove_overlap_naive, mask_nms_multithresh, degrade_mask
+from inference.post_process import remove_overlap_naive, corrupt_mask
+
+
+def mask_nms_multithresh(masks, boxes, thresholds=[0.5], ious=None):
+    """
+    Non-maximum suppression with masks at multiple thresholds.
+
+    Args:
+        masks (np array [n x H x W]): Masks.
+        boxes (np array [n x 5]): Boxes & confidences.
+        threshold (list of floats, optional): IoU thresholds. Defaults to [0.5].
+        ious  (np array, optional): Precomputed ious. Defaults to None.
+
+    Returns:
+        list of lists: Kept indices at different thresholds.
+    """
+
+    assert thresholds == sorted(thresholds)
+
+    if thresholds == [0]:
+        return [range(len(boxes))]
+
+    # Compute ious
+    if ious is None:
+        rle_pred = [pycocotools.mask.encode(np.asarray(m, order='F')) for m in masks]
+        ious = pycocotools.mask.iou(rle_pred, rle_pred, [0] * len(rle_pred))
+
+    all_idxs = [list(range(len(ious))) for _ in range(len(thresholds))]
+    picks = [[] for _ in thresholds]
+
+    # NMS
+    for idx in range(len(ious)):
+        if not any([idx in all_idx for all_idx in all_idxs]):
+            continue
+
+        overlappings = [np.where(ious[idx] > t)[0] for t in thresholds]  # overlaps for current idx
+
+        for i, overlapping in enumerate(overlappings):  # update masks to remove
+            if idx in all_idxs[i]:
+                if len(overlapping):
+                    picks[i].append(idx)
+                    all_idxs[i] = [j for j in all_idxs[i] if j not in overlapping]
+                else:
+                    all_idxs[i] = all_idxs[i][1:]
+
+    return picks
 
 
 def evaluate_at_confidences(masks, boxes, confidences, rle_truth):
+    """
+    Evaluates the mAP IoU at different confidences.
+
+    Args:
+        masks (list of np arrays): Predicted masks
+        boxes (list of np arrays): Predicted boxes & confidences.
+        confidences (list of floats): Confidence thresholds.
+        rle_truth (list): ground truths
+
+    Returns:
+        list: Scores
+    """
     # order = np.argsort(boxes[:, 4])[::-1]
     # masks = masks[order]
     # boxes = boxes[order]
@@ -32,9 +89,24 @@ def tweak_thresholds(
     thresholds_mask,
     thresholds_nms,
     thresholds_conf,
-    remove_overlap=False,
-    corrupt=False
+    remove_overlap=True,
+    corrupt=True
 ):
+    """
+    Function to tweak thresholds for masks, nms and confidence.
+
+    Args:
+        results (list of tuples): Results in the MMDet format [(boxes, masks), ...].
+        dataset (SartoriusDataset): Dataset containing ground truths.
+        thresholds_mask (list of floats): Mask thresholds.
+        thresholds_nms (list of floats): NMS thresholds
+        thresholds_conf (list of floats): Confidence thresholds.
+        remove_overlap (bool, optional): Whether to remove overlap.. Defaults to True.
+        corrupt (bool, optional): Whether to corrupt astro cells. Defaults to True.
+
+    Returns:
+        list of np arrays [3 x n_th_mask x n_th_nms x n_th_conf]: Scores per class for each config.
+    """
     scores = [[[[] for _ in thresholds_nms] for _ in thresholds_mask] for _ in range(3)]
 
     for idx_mask, threshold_mask in enumerate(thresholds_mask):
@@ -60,11 +132,11 @@ def tweak_thresholds(
             for idx_nms, pick in enumerate(picks):
                 masks_picked = masks[pick]
 
+                if corrupt and cell_type == 1:  # astro
+                    masks_picked = np.array([corrupt_mask(mask)[0] for mask in masks_picked])
+
                 if remove_overlap:
                     masks_picked = remove_overlap_naive(masks_picked, ious=ious[pick].T[pick])
-
-                if corrupt and cell_type == 1:  # astro
-                    masks_picked = np.array([degrade_mask(mask)[0] for mask in masks_picked])
 
                 score = evaluate_at_confidences(
                     masks_picked,

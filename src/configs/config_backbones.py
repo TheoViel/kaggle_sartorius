@@ -13,7 +13,8 @@ out_channels = {
 }
 
 custom_imports = dict(
-    imports=['model_zoo.efficientnet']
+    imports=['model_zoo.efficientnet'],
+    allow_failed_imports=True
 )
 
 backbones = dict(

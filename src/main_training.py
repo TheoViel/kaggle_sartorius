@@ -18,6 +18,11 @@ BATCH_SIZES = {
         "swin_tiny": 4,
         "swin_small": 3,
         "swin_base": 2,
+        "efficientnetv2_s": 4,
+        "efficientnetv2_m": 3,
+        "efficientnet_b4": 4,
+        "efficientnet_b5": 3,
+        "efficientnet_b6": 2,
     },
     "cascade_resnest": {
         "resnest50": 4,
@@ -130,8 +135,8 @@ class Config:
     selected_folds = [0]
 
     # Model
-    name = "htc"  # "cascade" "maskrcnn" "htc"
-    encoder = "resnet50"
+    name = "cascade"  # "cascade" "maskrcnn" "htc"
+    encoder = "efficientnet_b5"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
 
@@ -149,8 +154,6 @@ class Config:
 
     lr = 2e-4
     warmup_prop = 0.05
-
-    use_fp16 = False  # TODO
 
 
 if __name__ == "__main__":

@@ -25,11 +25,13 @@ def rle_decode(mask_rle, shape):
 
 def rles_to_mask_fix(encs, shape, single_channel=True, fix=True):
     """
-    Decodes a rle.
+    Decodes rles and optionally fixes broken masks with fill_poly.
 
     Args:
         encs (list of str): Rles for each class.
         shape (tuple [2]): Mask size (height, width).
+        single_channel (bool, Optional): Whether to convert the mask to single channel.
+        fix (bool, Optional): Whether to dix masks.
 
     Returns:
         np array [shape]: Mask.
@@ -52,28 +54,17 @@ def rles_to_mask_fix(encs, shape, single_channel=True, fix=True):
         return masks_fixed
 
 
-def mask_to_rles(mask):  # TODO + verif
-    pixels = mask.flatten()
+def rle_encode(img):
+    """
+    TODO
+    Not used except for inference.
 
-    # This simplified method requires first and last pixel to be zero
-    pixels[0] = 0
-    pixels[-1] = 0
+    Args:
+        img ([type]): [description]
 
-    rles = []
-    for i in range(1, int(np.max(pixels)) + 1):
-        pix = (pixels == i)
-        runs = np.where(pix[1:] != pix[:-1])[0] + 2
-        runs[1::2] -= runs[::2]
-        rles.append(" ".join(str(x) for x in runs))
-
-    return rles
-
-
-def rle_encode(img):  # TODO
-    '''
-    img: numpy array, 1 - mask, 0 - background
-    Returns run length as string formated
-    '''
+    Returns:
+        [type]: [description]
+    """
     pixels = img.flatten()
     pixels = np.concatenate([[0], pixels, [0]])
     runs = np.where(pixels[1:] != pixels[:-1])[0] + 1

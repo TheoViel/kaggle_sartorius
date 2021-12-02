@@ -18,6 +18,12 @@ RED = (238 / 255, 97 / 255, 55 / 255)
 
 
 def get_random_color():
+    """
+    Returns a random color thats visible on a gray background.
+
+    Returns:
+        tuple of floats(3): Color rgb code between 0 and 1.
+    """
     color = tuple(np.random.random(size=3))
     while np.max(color) - np.min(color) < 0.2:
         color = tuple(np.random.random(size=3))
@@ -26,17 +32,18 @@ def get_random_color():
 
 def plot_sample(img, mask=None, boxes=[], width=1, plotly=False):
     """
-    Plots the contours of a given mask.
+    Plots a sample
 
     Args:
         img (numpy array [H x W]): Image.
-        mask (numpy array [H x W x C]): Masks.
+        mask (numpy array [n x H x W or H x W], optional): Masks. Defaults to None
+        boxes (numpy array [n x 4], optional): Boxes. Defaults to [].
         width (int, optional): Contour width. Defaults to 1.
+        plotly (bool, optional): Whether to use plotly instead of matplotlib. Defaults to False.
 
     Returns:
-        img (numpy array [H x W]): Image with contours.
+        plotly.express figure : Plotly figure to display if plotly is used, else None.
     """
-
     if img.max() > 1:
         img = (img / 255).astype(float)
 
@@ -86,16 +93,42 @@ def plot_sample(img, mask=None, boxes=[], width=1, plotly=False):
 
 
 def get_centers(mask):
+    """
+    Gets the centers of a mask cells.
+
+    Args:
+        mask (np array [H x W]): Mask.
+
+    Returns:
+        np array [n x 2]: Centers.
+    """
     centers = []
     for i in range(1, int(np.max(mask)) + 1):
         centers.append(ndimage.measurements.center_of_mass(mask == i))
     return np.array(centers)
 
 
-def plot_preds_iou(img, preds, truths, boxes=None, boxes_2=None, width=1, plot_tp=True):
+def plot_preds_iou(
+    img, preds, truths, boxes=None, boxes_2=None, iou_thresh=0.5, width=1, plot_tp=True
+):
     """
-    Plots the contours of a given mask.
-    TODO
+    Plots the prediction using a color code depending on the IoU:
+    - Green = TP : Ground truth cell with an IoU > iou_thresh with a prediction
+    - Red = FN : IoU  truth cell with no IoU > iou_thresh with any prediction
+    - Blue = Predictions
+
+    Args:
+        img (numpy array [H x W]): Image.
+        preds (numpy array [n1 x H x W or H x W]): Predicted Masks.
+        truths (numpy array [n2 x H x W or H x W]): GT Masks.
+        boxes (numpy array [m1 x 4], optional): Boxes to display in red. Defaults to None.
+        boxes_2 (numpy array [m2 x 4], optional): Boxes to display in blue. Defaults to None.
+        iou_thresh (float, optional): Threshold to determine a hit or a miss. Defaults to 0.5
+        width (int, optional): Contour width. Defaults to 1.
+        plot_tp (bool, optional): Whether to display TP predictions. Defaults to True.
+
+    Returns:
+        plotly.express figure : Plotly figure to display.
     """
     if img.max() > 1:
         img = (img / 255).astype(float)
@@ -127,7 +160,7 @@ def plot_preds_iou(img, preds, truths, boxes=None, boxes_2=None, width=1, plot_t
     for i in range(1, int(np.max(preds)) + 1):
         m = ((preds == i) * 255).astype(np.uint8)
 
-        if not plot_tp and ious.max(0)[i - 1] > 0.5:
+        if not plot_tp and ious.max(0)[i - 1] > iou_thresh:
             continue
 
         contours, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
@@ -136,7 +169,7 @@ def plot_preds_iou(img, preds, truths, boxes=None, boxes_2=None, width=1, plot_t
     # Plot truths
     for i in range(1, int(np.max(truths)) + 1):
         m = ((truths == i) * 255).astype(np.uint8)
-        color = GREEN if ious.max(1)[i - 1] > 0.5 else RED
+        color = GREEN if ious.max(1)[i - 1] > iou_thresh else RED
 
         contours, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
         cv2.polylines(img_, contours, True, color, width)

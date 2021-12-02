@@ -25,6 +25,16 @@ def dice_score(pred, truth, eps=1e-8, threshold=0.5):
 
 
 def bbox_iou(bb1, bb2):
+    """
+    IoU for two bounding boxes in the format (x0, x1, y0, y1).
+
+    Args:
+        bb1 (list [4]): 1st box coordinates.
+        bb2 (list [4]): 2nd box coordinates.
+
+    Returns:
+        float: IoU.
+    """
     # determine the coordinates of the intersection rectangle
     x_left = max(bb1[0], bb2[0])
     y_top = max(bb1[1], bb2[1])
@@ -116,11 +126,12 @@ def iou_map(truths=None, preds=None, ious=None, verbose=0):
     Computes the metric for the competition.
     Masks contain the segmented pixels where each object has one value associated,
     and 0 is the background.
+    IoUs can be precomputed.
 
     Args:
-        truths (list of masks): Ground truths.
-        preds (list of masks): Predictions.
-        ious (list of matrices): Precomputed ious. Of size n_truths x n_preds.
+        truths (list of masks, optional): Ground truths.
+        preds (list of masks, optional): Predictions.
+        ious (list of matrices, optional): Precomputed ious. Of size n_truths x n_preds.
         verbose (int, optional): Whether to print infos. Defaults to 0.
 
     Returns:
@@ -161,6 +172,19 @@ def iou_map(truths=None, preds=None, ious=None, verbose=0):
 
 
 def quick_eval_results(dataset, results, num_classes=3):
+    """
+    Evaluate predictions directly from the mmdet output.
+    Performs post processing with the default parameters.
+
+    Args:
+        dataset (SartoriusDataset): Dataset containing ground truths.
+        results (list of tuples): Results in the MMDet format [(boxes, masks), ...].
+        num_classes (int, optional): Number of classes. Defaults to 3.
+
+    Returns:
+        float: Overall score
+        list [num_classes]: Scores per class.
+    """
     precs = [[] for _ in range(num_classes)]
     for idx in range(len(dataset)):
         masks, _, cell_type = quick_post_process_preds(
@@ -182,6 +206,18 @@ def quick_eval_results(dataset, results, num_classes=3):
 
 
 def evaluate(masks_pred, dataset, cell_types):
+    """
+    Evaluate predictions.
+
+    Args:
+        masks_pred (list of masks [n x nb_cell x h x w]): Predicted masks.
+        dataset (SartoriusDataset): Dataset containing ground truths.
+        cell_types (list of ints): Predicted cell types.
+
+    Returns:
+        list: Scores per image.
+        list of 3 lists: Scores per image per class.
+    """
     scores = []
     scores_per_class = [[], [], []]
 

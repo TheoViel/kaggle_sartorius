@@ -9,6 +9,14 @@ from params import MEAN, STD
 @BACKBONES.register_module()
 class EfficientNet(nn.Module):
     def __init__(self, name, blocks_idx, pretrained=True):
+        """
+        Constructor.
+
+        Args:
+            name (name): Model name as specified in timm.
+            blocks_idx (list of ints): Blocks to output features at.
+            pretrained (bool, optional): Whether to load pretrained weights. Defaults to True.
+        """
         super().__init__()
 
         self.effnet = getattr(timm.models, name)(
@@ -35,7 +43,7 @@ class EfficientNet(nn.Module):
         Args:
             x (torch tensor [BS x 3 x H x W]): Input image.
         Returns:
-            torch tensors: features.
+            list of torch tensors: features.
         """
         x = self.effnet.conv_stem(x)
         x = self.effnet.bn1(x)
@@ -46,6 +54,6 @@ class EfficientNet(nn.Module):
             x = b(x)
             if i in self.block_idx:
                 features.append(x)
-            print(i, x.size(), i in self.block_idx)
+            # print(i, x.size(), i in self.block_idx)
 
         return features

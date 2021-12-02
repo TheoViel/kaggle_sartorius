@@ -10,6 +10,18 @@ from mmdet.models.builder import build_detector
 
 
 def define_model(config_file, encoder="resnet50", pretrained_livecell=False, verbose=1):
+    """
+    Defines a model.
+
+    Args:
+        config_file (str): Path to the model config.
+        encoder (str, optional): Encoder name. Defaults to "resnet50".
+        pretrained_livecell (bool, optional): Whether to use pretrained weights. Defaults to False.
+        verbose (int, optional): Quantity of info to display (0, 1, 2). Defaults to 1.
+
+    Returns:
+        mmdet MMDataParallel: Model.
+    """
     # Configs
     cfg = mmcv.Config.fromfile(config_file)
 
@@ -54,6 +66,18 @@ def define_model(config_file, encoder="resnet50", pretrained_livecell=False, ver
 
 
 def load_pretrained_weights(model, weights, verbose=0, adapt_swin=False):
+    """
+    Custom weights loading function
+
+    Args:
+        model (mmdet MMDataParallel): Model.
+        weights (str): Path to the weights.
+        verbose (int, optional): Quantity of info to display (0, 1, 2). Defaults to 0.
+        adapt_swin (bool, optional): Whether to adapt swin weights. Defaults to False.
+
+    Returns:
+        mmdet MMDataParallel: Model with pretrained weights.
+    """
     if verbose < 2:
         logging.disable(sys.maxsize)
 
@@ -98,6 +122,15 @@ def load_pretrained_weights(model, weights, verbose=0, adapt_swin=False):
 
 
 def adapt_swin_weights(w):
+    """
+    Adapts weights for swin transformers.
+
+    Args:
+        w (OrderedDict): Weights.
+
+    Returns:
+        OrderedDict: Adapted weights.
+    """
     new_w = OrderedDict()
 
     for k in w:
