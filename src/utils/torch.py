@@ -88,3 +88,19 @@ def worker_init_fn(worker_id):
         worker_id (int): Id of the worker.
     """
     np.random.seed(np.random.get_state()[1][0] + worker_id)
+
+
+def freeze_batchnorm(model):
+    """
+    Freezes the batch normalization layers of a model.
+
+    Args:
+        model (torch model): Model.
+    """
+    for module in model.modules():
+        if isinstance(module, torch.nn.BatchNorm2d):
+            if hasattr(module, 'weight'):
+                module.weight.requires_grad_(False)
+            if hasattr(module, 'bias'):
+                module.bias.requires_grad_(False)
+            module.eval()

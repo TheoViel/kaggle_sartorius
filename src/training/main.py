@@ -7,7 +7,7 @@ from data.preparation import prepare_data, prepare_extra_data, get_splits
 from data.transforms import define_pipelines, to_mosaic
 from data.dataset import SartoriusDataset
 
-from utils.torch import seed_everything, count_parameters, save_model_weights
+from utils.torch import seed_everything, count_parameters, save_model_weights, freeze_batchnorm
 
 
 def train(
@@ -38,6 +38,8 @@ def train(
     ).to(config.device)
     model.zero_grad()
 
+    if config.freeze_bn:
+        freeze_batchnorm(model)
     n_parameters = count_parameters(model)
 
     train_dataset = SartoriusDataset(
@@ -82,6 +84,7 @@ def train(
         compute_val_loss=config.compute_val_loss,
         num_classes=config.num_classes,
         use_extra_samples=config.use_extra_samples,
+        freeze_bn=config.freeze_bn,
         device=config.device,
     )
 

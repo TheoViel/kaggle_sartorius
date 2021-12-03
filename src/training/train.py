@@ -8,6 +8,7 @@ from data.loader import define_loaders
 from training.optim import define_optimizer, define_scheduler
 from inference.predict import predict
 from utils.metrics import quick_eval_results
+from utils.torch import freeze_batchnorm
 
 
 def fit(
@@ -30,6 +31,7 @@ def fit(
     use_fp16=False,
     num_classes=3,
     use_extra_samples=False,
+    freeze_bn=False,
     device="cuda",
 ):
     """
@@ -54,6 +56,7 @@ def fit(
         compute_val_loss (bool, optional): Whether to compute the validation loss. Defaults to True.
         num_classes (int, optional): Number of classes. Defaults to 3.
         use_extra_samples (bool, optional): Whether to use extra samples. Defaults to False.
+        freeze_bn (bool, optional): Whether to freeze batchnorm layers. Defaults to False.
         device (str, optional): Training device. Defaults to "cuda".
 
     Returns:
@@ -84,6 +87,8 @@ def fit(
     for epoch in range(1, epochs+1):
         train_dataset.sample_extra_data(extra_scheduling[epoch - 1])
         model.train()
+        if freeze_bn:
+            freeze_batchnorm(model)
         start_time = time.time()
         optimizer.zero_grad()
         avg_loss = 0

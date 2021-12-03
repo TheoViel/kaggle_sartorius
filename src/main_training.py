@@ -21,8 +21,7 @@ BATCH_SIZES = {
         "efficientnetv2_s": 4,
         "efficientnetv2_m": 3,
         "efficientnet_b4": 4,
-        "efficientnet_b5": 3,
-        "efficientnet_b6": 2,
+        "efficientnet_b5": 2,
     },
     "cascade_resnest": {
         "resnest50": 4,
@@ -123,7 +122,6 @@ class Config:
     extra_name = "livecell_no_shsy5y"
     use_extra_samples = False
     num_classes = 3
-    pretrained_livecell = True
 
     use_mosaic = False
     data_config = "configs/config_aug_mosaic.py" if use_mosaic else "configs/config_aug.py"
@@ -139,6 +137,7 @@ class Config:
     encoder = "efficientnet_b5"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
+    freeze_bn = True
 
     if name == "htc":
         data_config = "configs/config_aug_semantic.py"
