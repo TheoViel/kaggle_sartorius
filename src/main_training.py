@@ -10,6 +10,9 @@ BATCH_SIZES = {
         "resnet50": 4,
         "resnet101": 4,
         "resnext101": 4,
+        "efficientnet_b4": 4,
+        "efficientnet_b5": 3,  # 3
+        "efficientnet_b6": 2,
     },
     "cascade": {
         "resnet50": 4,
@@ -20,8 +23,9 @@ BATCH_SIZES = {
         "swin_base": 2,
         "efficientnetv2_s": 4,
         "efficientnetv2_m": 3,
-        "efficientnet_b4": 4,
-        "efficientnet_b5": 2,
+        "efficientnet_b4": 3,
+        "efficientnet_b5": 2,  # 3
+        "efficientnet_b6": 2,
     },
     "cascade_resnest": {
         "resnest50": 4,
@@ -134,7 +138,7 @@ class Config:
 
     # Model
     name = "cascade"  # "cascade" "maskrcnn" "htc"
-    encoder = "efficientnet_b5"
+    encoder = "efficientnet_b4"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
     freeze_bn = True
