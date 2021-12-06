@@ -12,6 +12,6 @@ def prepare_data(width=1):
             lambda x: np.unique(x)[0] if len(np.unique(x)) == 1 else np.unique(x)
         )
     df['img_path'] = TRAIN_IMG_PATH + df['id'] + ".png"
-    df['mask_path'] = OUT_PATH + f"proc_train_{width}/" + df['id'] + ".npy"
+    df['mask_path'] = OUT_PATH + "cellpose_train/" + df['id'] + ".npy"
 
     return df

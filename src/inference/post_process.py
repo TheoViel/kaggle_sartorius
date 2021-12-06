@@ -1,9 +1,8 @@
 import numpy as np
 
-from scipy import ndimage as ndi
-from skimage.segmentation import watershed, relabel_sequential
-from skimage.feature import peak_local_max
-from skimage import measure
+# from scipy import ndimage as ndis
+from skimage.segmentation import relabel_sequential
+from cellpose.dynamics import compute_masks
 
 
 def remove_padding(pred, shape):
@@ -40,47 +39,58 @@ def remove_small_components(pred_i, min_size=10, verbose=0):
     return pred_i
 
 
-def post_process_shsy5y(pred):
-    distance = pred[2] * (1 - pred[1]) * pred[0]
+def post_process_shsy5y(y):
+    masks, _, _ = compute_masks(
+        y[0],
+        y[1:],
+        bd=np.zeros_like(y[0]),
+        niter=1,
+        mask_threshold=0.5,
+        # diam_threshold=100,
+        # flow_threshold=-1,
+        min_size=10,
+        omni=False,
+    )
 
-    coords = peak_local_max(distance, min_distance=5, labels=pred[0] > 0.5, exclude_border=False)
-
-    mask = np.zeros(distance.shape, dtype=bool)
-    mask[tuple(coords.T)] = True
-    markers, _ = ndi.label(mask)
-
-    return watershed(-distance, markers, mask=(pred[0] > 0.5).astype(int))
-
-
-def post_process_cort(pred):
-    distance = pred[0] * (1 - pred[1])  # * pred[2]
-    image = (distance > 0.5).astype(int)
-    y_pred = measure.label(image, neighbors=8, background=0)
-    props = measure.regionprops(y_pred)
-    for j in range(len(props)):
-        if props[j].area < 12:
-            y_pred[y_pred == j + 1] = 0
-    y_pred = measure.label(y_pred, neighbors=8, background=0)
-
-    mask = (pred[0] > 0.5).astype(int)
-    return watershed(pred[0], y_pred, mask=mask, watershed_line=True)
+    return masks
 
 
-def post_process_astro(pred):
-    distance = pred[2] * (1 - pred[1]) * pred[0]
+def post_process_cort(y):
+    masks, _, _ = compute_masks(
+        y[0],
+        y[1:],
+        bd=np.zeros_like(y[0]),
+        niter=1,
+        mask_threshold=0.5,
+        # diam_threshold=100,
+        # flow_threshold=-1,
+        min_size=10,
+        omni=False,
+    )
 
-    coords = peak_local_max(distance, min_distance=20, labels=pred[0] > 0.5, exclude_border=False)
+    return masks
 
-    mask = np.zeros(distance.shape, dtype=bool)
-    mask[tuple(coords.T)] = True
-    markers, _ = ndi.label(mask)
 
-    return watershed(-distance, markers, mask=(pred[0] > 0.5).astype(int))
+def post_process_astro(y):
+    masks, _, _ = compute_masks(
+        y[0],
+        y[1:],
+        bd=np.zeros_like(y[0]),
+        niter=1,
+        mask_threshold=0.5,
+        # diam_threshold=100,
+        # flow_threshold=-1,
+        min_size=10,
+        omni=False,
+    )
+
+    return masks
 
 
 def preds_to_instance(preds, cell_types):
     preds_instance = []
     for pred, cell_type in zip(preds, cell_types):
+        pred(pred.shape)
         if cell_type == "shsy5y":
             pred_i = post_process_shsy5y(pred)
             pred_i = remove_small_components(pred_i, min_size=100)

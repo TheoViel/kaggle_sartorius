@@ -80,13 +80,9 @@ def compute_activations(pred_mask, pred_cls, activations, detach=False):
         if activations['mask'] == 'sigmoid':
             pred_mask[:, 0] = torch.sigmoid(pred_mask[:, 0])
 
-    if 'contour' in activations.keys():
-        if activations['contour'] == 'sigmoid':
-            pred_mask[:, 1] = torch.sigmoid(pred_mask[:, 1])
-
     if 'dist' in activations.keys():
         if activations['dist'] == 'sigmoid':
-            pred_mask[:, 2] = torch.sigmoid(pred_mask[:, 2])
+            pred_mask[:, 1:] = pred_mask[:, 1:].sigmoid() * 2 - 1
 
     if 'cls' in activations.keys():
         if activations['cls'] == 'softmax':

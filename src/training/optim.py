@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from training.losses import SmoothCrossEntropyLoss, FocalTverskyLoss, lovasz_loss, DiceLoss
+from training.losses import SmoothCrossEntropyLoss, lovasz_loss
 
 
 def define_optimizer(name, params, lr=1e-3):
@@ -41,15 +41,11 @@ class SartoriusLoss(nn.Module):
         super().__init__()
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
         self.ce = SmoothCrossEntropyLoss()
-        self.focal_tversky = FocalTverskyLoss()
         self.lovasz = lovasz_loss
-        self.dice = DiceLoss()
+        self.mse = nn.MSELoss(reduction="none")
 
         self.w_seg_loss = config["w_seg_loss"]
-
         self.w_bce = config["w_bce"]
-        self.w_dice = config["w_dice"]
-        self.w_focal = config["w_focal"]
         self.w_lovasz = config["w_lovasz"]
 
     def compute_seg_loss(self, pred, truth):
@@ -61,21 +57,19 @@ class SartoriusLoss(nn.Module):
         Returns:
             torch tensor [BS]: Loss value.
         """
-        truth[:, :2] = (truth[:, :2] > 0).float()  # ignore instance id
+        truth[:, 0] = (truth[:, 0] > 0).float()  # ignore instance id
 
         loss = 0
-        for i in range(3):
-            if self.w_bce[i]:
-                loss += self.w_bce[i] * self.bce(pred[:, i], truth[:, i]).mean((1, 2))
 
-            if self.w_focal[i]:
-                loss += self.w_focal[i] * self.focal_tversky(pred[:, i], truth[:, i]).mean(-1)
+        # seg
+        if self.w_bce:
+            loss += self.w_bce * self.bce(pred[:, 0], truth[:, 0]).mean((1, 2))
+        if self.w_lovasz:
+            loss += self.w_lovasz * self.lovasz(pred[:, 0], truth[:, 0])
 
-            if self.w_lovasz[i]:
-                loss += self.w_lovasz[i] * self.lovasz(pred[:, i], truth[:, i])
-
-            if self.w_dice[i]:
-                loss += self.w_dice[i] * self.dice(pred[:, i], truth[:, i])
+        # reg
+        loss += (self.mse(pred[:, 1], 5 * truth[:, 1]) * truth[:, 0]).mean((1, 2))
+        loss += (self.mse(pred[:, 2], 5 * truth[:, 2]) * truth[:, 0]).mean((1, 2))
 
         return torch.div(loss, 3)
 

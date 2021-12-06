@@ -1,5 +1,6 @@
 import gc
 import torch
+import numpy as np
 from sklearn.model_selection import StratifiedKFold
 
 from training.train import fit
@@ -124,12 +125,12 @@ def validate(df, model, config):
 
     pred_cell_types = [CELL_TYPES[i] for i in preds_cls.argmax(-1)]
 
-    preds_instance = preds_to_instance(preds, pred_cell_types)
+    preds_instance = []  # preds_to_instance(preds, pred_cell_types)  # TODO
 
     truths = [m[..., 0] for m in dataset.masks]
-    score = iou_map(truths, preds_instance)
+    # score = np.mean([iou_map([t], [p]) for t, p in zip (truths, preds_instance)])
 
-    print(f' -> Validation IoU mAP = {score:.3f}')
+    # print(f' -> Validation IoU mAP = {score:.3f}')
 
     return preds, preds_instance, truths
 
@@ -172,7 +173,7 @@ def k_fold(config, log_folder=None):
             torch.cuda.empty_cache()
             gc.collect()
 
-    cv_score = iou_map(all_truths, all_preds_instance, verbose=0)
-    print(f'\n -> CV IoU mAP : {cv_score:.3f}')
+    # cv_score = iou_map(all_truths, all_preds_instance, verbose=0)
+    # print(f'\n -> CV IoU mAP : {cv_score:.3f}')
 
     return all_preds, all_preds_instance, all_truths

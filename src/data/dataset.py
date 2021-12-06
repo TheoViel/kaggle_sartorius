@@ -27,7 +27,7 @@ class SartoriusDataset(Dataset):
         self.img_paths = df["img_path"].values
         self.mask_paths = df["mask_path"].values
 
-        self.masks = [np.load(path).transpose(1, 2, 0).astype(np.int16) for path in self.mask_paths]
+        self.masks = [np.load(path).transpose(1, 2, 0) for path in self.mask_paths]
         self.cell_types = df["cell_type"].values
 
         self.y_cls = [CELL_TYPES.index(c) for c in self.cell_types]
@@ -37,16 +37,13 @@ class SartoriusDataset(Dataset):
 
     def __getitem__(self, idx):
         image = cv2.imread(self.img_paths[idx])
-        # masks = np.load(self.mask_paths[idx]).transpose(1, 2, 0).astype(np.int16)
-        masks = self.masks[idx]
+        masks = self.masks[idx][..., [0, 2, 3]]
 
         if self.transforms:
             transformed = self.transforms(image=image, mask=masks)
             image = transformed["image"]
             masks = transformed["mask"]
             masks = masks.transpose(1, 2).transpose(0, 1).float()
-
-        masks[-1] = masks[-1] / 10000.
 
         y = torch.tensor(self.y_cls[idx])
 
