@@ -113,9 +113,9 @@ class Config:
     # General
     seed = 42
     verbose = 1
-    first_epoch_eval = 10
+    first_epoch_eval = 5
     compute_val_loss = False
-    verbose_eval = 10
+    verbose_eval = 5
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     save_weights = True
@@ -123,12 +123,15 @@ class Config:
     # Images
     fix = True
     remove_anomalies = True
+
     extra_name = "livecell_no_shsy5y"
     use_extra_samples = False
+    use_pl = True
+
     num_classes = 3
 
-    use_mosaic = False
-    data_config = "configs/config_aug_mosaic.py" if use_mosaic else "configs/config_aug.py"
+    data_config = "configs/config_aug.py"
+#     data_config = "configs/config_aug_extra.py"  # flip_paste
 
     # k-fold
     split = "sgkf"
@@ -137,8 +140,8 @@ class Config:
     selected_folds = [0]
 
     # Model
-    name = "cascade"  # "cascade" "maskrcnn" "htc"
-    encoder = "efficientnet_b4"
+    name = "cascade"  # "cascade" "maskrcnn"
+    encoder = "resnext101"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
     freeze_bn = True
@@ -154,6 +157,9 @@ class Config:
     val_bs = batch_size
 
     epochs = 10 * batch_size
+    if use_pl or use_extra_samples:
+        # epochs = epochs // 2
+        epochs = epochs // 3
 
     lr = 2e-4
     warmup_prop = 0.05

@@ -192,7 +192,9 @@ def get_rpn_boxes_single(
     else:
         return proposals.new_zeros(0, 5)
 
-    return dets[: cfg.max_per_img]
+    dets = dets[dets[:, 4] > cfg.score_thr]
+    dets = dets[:cfg.max_per_img]
+    return dets
 
 
 def get_rpn_boxes(rpn_head, cls_scores, bbox_preds, img_metas, cfg):

@@ -1,12 +1,10 @@
 from sklearn.model_selection import StratifiedKFold
 
-from model_zoo.models import define_model
 from training.train import fit
-
-from data.preparation import prepare_data, prepare_extra_data, get_splits
-from data.transforms import define_pipelines, to_mosaic
+from model_zoo.models import define_model
 from data.dataset import SartoriusDataset
-
+from data.transforms import define_pipelines
+from data.preparation import prepare_data, prepare_extra_data, get_splits, prepare_pl_data
 from utils.torch import seed_everything, count_parameters, save_model_weights, freeze_batchnorm
 
 
@@ -48,8 +46,6 @@ def train(
         precompute_masks=precompute_masks,
         df_extra=df_extra,
     )
-    if config.use_mosaic:
-        train_dataset = to_mosaic(config, train_dataset)
 
     val_dataset = SartoriusDataset(
         df_val,
@@ -64,7 +60,7 @@ def train(
 
     print(f"    -> {len(train_dataset)} training images")
     print(f"    -> {len(val_dataset)} validation images")
-    print(f"    -> {n_parameters} trainable parameters\n")
+    print(f"    -> {n_parameters} trainable parameters")
 
     results = fit(
         model,
@@ -83,7 +79,7 @@ def train(
         first_epoch_eval=config.first_epoch_eval,
         compute_val_loss=config.compute_val_loss,
         num_classes=config.num_classes,
-        use_extra_samples=config.use_extra_samples,
+        use_extra_samples=config.use_extra_samples or config.use_pl,
         freeze_bn=config.freeze_bn,
         device=config.device,
     )
@@ -106,13 +102,13 @@ def k_fold(config, log_folder=None):
     Returns:
         list of tuples: Results in the MMDet format [(boxes, masks), ...].
     """
+    df_extra = None
     df = prepare_data(fix=False, remove_anomalies=config.remove_anomalies)
     df_fix = prepare_data(fix=True, remove_anomalies=config.remove_anomalies)
 
-    if config.use_extra_samples > 0:
+    if config.use_extra_samples:
+        assert not config.use_pl, "Cannot use PL and extra data"
         df_extra = prepare_extra_data(config.extra_name)
-    else:
-        df_extra = None
 
     splits = get_splits(df, config)
 
@@ -126,6 +122,9 @@ def k_fold(config, log_folder=None):
                 df_train = df_fix.iloc[train_idx].copy().reset_index(drop=True)
             else:
                 df_train = df.iloc[train_idx].copy().reset_index(drop=True)
+
+            if config.use_pl:
+                df_extra = prepare_pl_data(f"pl_ens15_{i}")
 
             df_val = df.iloc[val_idx].copy().reset_index(drop=True)
 

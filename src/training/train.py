@@ -73,10 +73,19 @@ def fit(
     )
 
     if use_extra_samples:
-        extra_scheduling = [100 * (i // 5) for i in range(epochs)][::-1]
-        assert epochs == len(extra_scheduling)
+        # extra_scheduling = np.clip(  # PL
+        #     [100 * (i ** (1 + 10 / epochs) // 5) for i in range(epochs)][::-1], 0, 1000
+        # ).astype(int)
+        # extra_scheduling = np.clip(  # PL -
+        #     [50 * (i ** (1 + 10 / epochs) // 5) for i in range(epochs)][::-1], 0, 1000
+        # ).astype(int)
+        extra_scheduling = np.clip(  # PL +
+            [200 * (i ** (1 + 10 / epochs) // 1) for i in range(epochs)][::-1], 0, 1250
+        ).astype(int)
+        print(f"    -> Extra scheduling : {extra_scheduling.tolist()}\n")
     else:
         extra_scheduling = [0] * epochs
+        print()
 
     num_training_steps = (
         len(train_dataset.img_paths) * epochs + np.sum(extra_scheduling)
@@ -84,7 +93,7 @@ def fit(
     num_warmup_steps = int(warmup_prop * num_training_steps)
     scheduler = define_scheduler(scheduler_name, optimizer, num_warmup_steps, num_training_steps)
 
-    for epoch in range(1, epochs+1):
+    for epoch in range(1, epochs + 1):
         train_dataset.sample_extra_data(extra_scheduling[epoch - 1])
         model.train()
         if freeze_bn:

@@ -18,10 +18,6 @@ RESULTS_PH = {
     'bbox_fields': ["gt_bboxes"],
     'mask_fields': ["gt_masks"],
     'seg_fields': ['gt_semantic_seg'],
-    # 'img_prefix': None,
-    # 'img_info': {
-    #     'filename': ""
-    # }
 }
 
 
@@ -105,6 +101,7 @@ class SartoriusDataset(Dataset):
             class_labels = self.class_labels[idx]
 
             image = cv2.imread(path)
+            # image = cv2.imread("test.png")
 
             if self.masks is not None:
                 masks = self.masks[idx]
@@ -159,21 +156,30 @@ class SartoriusDataset(Dataset):
         return BitmapMasks([pycocotools.mask.decode(m) for m in mask], h, w)
 
 
+RESULTS_PH_INF = {
+    'scale_factor': np.ones(4, dtype=np.float32),  # if no resizing in augs
+    "pad_shape": (0, 0),
+    "img_norm_cfg": None,
+    "flip_direction": None,
+    "flip": None,
+    'img_fields': ["img"],
+    'bbox_fields': ["gt_bboxes"],
+    'mask_fields': ["gt_masks"]
+}
+
+
 class SartoriusInferenceDataset(Dataset):
     """
     Segmentation dataset for inference.
-    TODO
     """
-    def __init__(self, df, transforms, precompute_masks=True):
+    def __init__(self, df, transforms):
         """
         Constructor.
 
         Args:
-            df (pandas dataframe): Metadata.
-            transforms (albumentation transforms, optional): Transforms to apply. Defaults to None.
-            train (bool, optional): Indicates if the dataset is used for training. Defaults to True.
+            df (pandas DataFrame): Metadata.
+            transforms (MMDet transforms): Augmentation pipeline to apply.
         """
-
         self.df = df
         self.transforms = transforms
 
@@ -191,14 +197,10 @@ class SartoriusInferenceDataset(Dataset):
             "ori_shape": image.shape[:2],
             "filename": self.img_paths[idx],
             'ori_filename': self.img_paths[idx],
-            'scale_factor': np.ones(4, dtype=np.float32),
         }
-        results.update(RESULTS_PH)
+        results.update(RESULTS_PH_INF)
         del results['bbox_fields'], results['mask_fields']
 
         results_transfo = self.transforms(results.copy())
-
-        # if 'scale_factor' not in results_transfo.keys():
-        #     results_transfo['scale_factor'] = np.ones(4)
 
         return results_transfo
