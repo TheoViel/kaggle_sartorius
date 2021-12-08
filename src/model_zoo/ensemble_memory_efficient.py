@@ -47,17 +47,17 @@ class EnsembleModel(BaseDetector):
         for i in range(3):
             rpn_cfg = mmcv.Config(
                 dict(
-                    score_thr=0,
+                    score_thr=self.config['rpn_score_threshold'][i],
                     nms_pre=self.config['rpn_nms_pre'][i],
                     max_per_img=self.config['rpn_max_per_img'][i],
-                    nms=dict(type="nms", iou_threshold=self.config['bbox_iou_threshold'][i]),
+                    nms=dict(type="nms", iou_threshold=self.config['rpn_iou_threshold'][i]),
                     min_bbox_size=0,
                 )
             )
             rcnn_cfg = mmcv.Config(
                 dict(
-                    score_thr=0.25,
-                    nms=dict(type="nms", iou_threshold=self.config['bbox_iou_threshold'][i]),
+                    score_thr=self.config['rcnn_score_threshold'][i],
+                    nms=dict(type="nms", iou_threshold=self.config['rcnn_iou_threshold'][i]),
                     mask_thr_binary=-1,
                 )
             )
@@ -165,78 +165,6 @@ class EnsembleModel(BaseDetector):
         """
         raise NotImplementedError
 
-        aug_bboxes, aug_scores, aug_img_metas = {}, {}, {}
-
-        for i, model in enumerate(self.models):
-
-            if self.single_fold_proposals:
-                if not self.names[i].endswith('_0.pt'):
-                    continue
-
-            for x, img_meta in zip(model.extract_feats(imgs), img_metas):
-                flip_direction = img_meta[0]["flip_direction"]
-
-                cls_score, bbox_pred = model.rpn_head(x)
-
-                try:
-                    aug_bboxes[flip_direction].append(bbox_pred)
-                    aug_scores[flip_direction].append(cls_score)
-                    aug_img_metas[flip_direction].append(img_meta)
-                except KeyError:
-                    aug_bboxes[flip_direction] = [bbox_pred]
-                    aug_scores[flip_direction] = [cls_score]
-                    aug_img_metas[flip_direction] = [img_meta]
-
-        proposals, img_metas_proposals = [], []
-        for flip_direction in aug_bboxes.keys():
-            merged_bboxes, merged_scores = [], []
-            for lvl in range(len(aug_bboxes[flip_direction][0])):
-                merged_bboxes_lvl = torch.stack(
-                    [bboxes[lvl] for bboxes in aug_bboxes[flip_direction]]
-                ).mean(dim=0)
-                merged_scores_lvl = torch.stack(
-                    [scores[lvl] for scores in aug_scores[flip_direction]]
-                ).mean(dim=0)
-
-                # print(merged_bboxes_lvl.size())
-
-                # if flip_direction == "horizontal":
-                #     merged_bboxes_lvl = merged_bboxes_lvl.flip([3])
-                #     merged_scores_lvl = merged_scores_lvl.flip([3])
-                # elif flip_direction == "vertical":
-                #     merged_bboxes_lvl = merged_bboxes_lvl.flip([3])
-                #     merged_scores_lvl = merged_scores_lvl.flip([3])
-                # elif flip_direction == "diagonal":
-                #     merged_bboxes_lvl = merged_bboxes_lvl.flip([2, 3])
-                #     merged_scores_lvl = merged_scores_lvl.flip([2, 3])
-
-                merged_bboxes.append(merged_bboxes_lvl)
-                merged_scores.append(merged_scores_lvl)
-
-            proposal_list = self.models[0].rpn_head.get_bboxes(
-                merged_scores, merged_bboxes, aug_img_metas[flip_direction][0]
-            )
-
-            if flip_direction in ["horizontal"]:
-                # print(len(proposal_list), proposal_list[0].size())
-                proposals.append(proposal_list)
-                img_metas_proposals.append(aug_img_metas[flip_direction][0])
-                # print(aug_img_metas[flip_direction][0])
-
-        proposal_list_final = []
-
-        for i in range(len(proposals[0])):
-            # Doesn't work but I could try to use NMS
-            merged_bboxes, merged_scores = merge_aug_bboxes(
-                [p[i][:, :4] for p in proposals],
-                [p[i][:, 4] for p in proposals],
-                img_metas_proposals,
-            )
-            merged_proposal = torch.cat([merged_bboxes, merged_scores.unsqueeze(1)], 1)
-            proposal_list_final.append(merged_proposal)
-
-        return proposal_list_final, (merged_bboxes, merged_scores)
-
     def get_bboxes(self, imgs, img_metas, proposal_list, rcnn_cfg):
         """
         Gets rcnn boxes. Adapted from :
@@ -282,17 +210,26 @@ class EnsembleModel(BaseDetector):
             aug_bboxes, aug_scores, aug_img_metas
         )
 
-        det_bboxes, det_labels = single_class_boxes_nms(
-            merged_bboxes,
-            merged_scores,
-            iou_threshold=rcnn_cfg.nms.iou_threshold,
-        )
+        if self.config['bbox_nms']:
+            det_bboxes, det_labels = single_class_boxes_nms(
+                merged_bboxes,
+                merged_scores,
+                iou_threshold=rcnn_cfg.nms.iou_threshold,
+            )
+            det_bboxes = torch.cat([det_bboxes, det_labels.unsqueeze(-1)], -1)
 
-        det_bboxes = torch.cat([det_bboxes, det_labels.unsqueeze(-1)], -1)
+        else:
+            det_scores, det_labels = torch.max(merged_scores, 1)
+            det_bboxes = torch.cat(
+                [merged_bboxes, det_scores.unsqueeze(1), det_labels.unsqueeze(1)], 1
+            )
+
+            _, order = det_scores.sort(0, descending=True)
+            det_bboxes = det_bboxes[order]
 
         det_bboxes = det_bboxes[det_bboxes[:, 4] > rcnn_cfg.score_thr]
 
-        return det_bboxes, aug_bboxes
+        return det_bboxes, torch.cat([merged_bboxes, merged_scores], 1)
 
     def get_masks(self, imgs, img_metas, det_bboxes, det_labels):
         """

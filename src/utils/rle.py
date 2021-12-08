@@ -56,17 +56,35 @@ def rles_to_mask_fix(encs, shape, single_channel=True, fix=True):
 
 def rle_encode(img):
     """
-    TODO
-    Not used except for inference.
-
+    Encodes a binary mask to rle.
     Args:
-        img ([type]): [description]
+        img (np array [H x W]): Mask.
 
     Returns:
-        [type]: [description]
+        str: rle encoding.
     """
     pixels = img.flatten()
     pixels = np.concatenate([[0], pixels, [0]])
     runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
     runs[1::2] -= runs[::2]
     return ' '.join(str(x) for x in runs)
+
+
+def rle_encoding(x):
+    """
+    Encodes a binary mask to rle.
+    Args:
+        x (np array [H x W]): Mask.
+
+    Returns:
+        str: rle encoding.
+    """
+    dots = np.where(x.flatten() == 1)[0]
+    run_lengths = []
+    prev = -2
+    for b in dots:
+        if (b > prev + 1):
+            run_lengths.extend((b + 1, 0))
+        run_lengths[-1] += 1
+        prev = b
+    return ' '.join(map(str, run_lengths))

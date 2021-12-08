@@ -2,7 +2,6 @@ from mmcv import Config
 from mmcv.utils import build_from_cfg
 from mmdet.datasets.builder import PIPELINES
 from mmdet.datasets.pipelines import Compose
-from mmdet.datasets.dataset_wrappers import MultiImageMixDataset
 
 
 def define_pipelines(config_file, multi_image=False):
@@ -29,23 +28,3 @@ def define_pipelines(config_file, multi_image=False):
             k: pipe_cfg[k].pipeline for k in pipe_cfg
         }
     return pipelines
-
-
-def to_mosaic(config, dataset, pipeline_name='mosaic'):
-    """
-    TODO
-
-    Args:
-        config ([type]): [description]
-        dataset ([type]): [description]
-        pipeline_name (str, optional): [description]. Defaults to 'mosaic'.
-
-    Returns:
-        [type]: [description]
-    """
-    pipelines_dicts = define_pipelines(config.data_config, multi_image=True)
-
-    dataset.CLASSES = []
-    dataset_mosaic = MultiImageMixDataset(dataset, pipelines_dicts[pipeline_name])
-
-    return dataset_mosaic

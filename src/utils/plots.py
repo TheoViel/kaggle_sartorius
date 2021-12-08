@@ -71,6 +71,7 @@ def plot_sample(img, mask=None, boxes=[], width=1, plotly=False):
         for i in range(1, int(np.max(mask)) + 1):
             m = ((mask == i) * 255).astype(np.uint8)
             color = get_random_color()
+            # color = (i / (int(np.max(mask)) + 1), 0, 0)
             colors.append(color)
 
             contours, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
