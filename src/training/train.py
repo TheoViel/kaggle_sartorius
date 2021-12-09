@@ -73,15 +73,13 @@ def fit(
     )
 
     if use_extra_samples:
-        # extra_scheduling = np.clip(  # PL
-        #     [100 * (i ** (1 + 10 / epochs) // 5) for i in range(epochs)][::-1], 0, 1000
-        # ).astype(int)
         # extra_scheduling = np.clip(  # PL -
         #     [50 * (i ** (1 + 10 / epochs) // 5) for i in range(epochs)][::-1], 0, 1000
         # ).astype(int)
-        extra_scheduling = np.clip(  # PL +
-            [200 * (i ** (1 + 10 / epochs) // 1) for i in range(epochs)][::-1], 0, 1250
+        extra_scheduling = np.clip(  # PL
+            [100 * (i ** (1 + 10 / epochs) // 5) for i in range(epochs)][::-1], 0, 1000
         ).astype(int)
+
         print(f"    -> Extra scheduling : {extra_scheduling.tolist()}\n")
     else:
         extra_scheduling = [0] * epochs

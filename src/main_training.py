@@ -80,13 +80,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--encoder",
-        type=str,
-        default=None,
-        help="Encoder",
-    )
-
-    parser.add_argument(
         "--name",
         type=str,
         default=None,
@@ -94,10 +87,17 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--use_extra_samples",
-        type=bool,
+        "--encoder",
+        type=str,
         default=None,
-        help="Whether to use extra samples from the Livecell dataset.",
+        help="Encoder",
+    )
+
+    parser.add_argument(
+        "--freeze_bn",
+        type=int,
+        default=None,
+        help="Whether to freeze batch norm layers.",
     )
 
     args = parser.parse_args()
@@ -158,8 +158,7 @@ class Config:
 
     epochs = 10 * batch_size
     if use_pl or use_extra_samples:
-        # epochs = epochs // 2
-        epochs = epochs // 3
+        epochs = epochs // 2
 
     lr = 2e-4
     warmup_prop = 0.05
@@ -179,6 +178,9 @@ if __name__ == "__main__":
     if args.lr is not None:
         config.lr = args.lr
 
+    if args.freeze_bn is not None:
+        config.freeze_bn = bool(args.freeze_bn)
+
     if args.encoder is not None:
         config.encoder = args.encoder
 
@@ -192,9 +194,6 @@ if __name__ == "__main__":
     if args.encoder is not None or args.name is not None:
         config.batch_size = BATCH_SIZES[config.name][config.encoder]
         config.epochs = 10 * config.batch_size
-
-    if args.use_extra_samples is not None:
-        config.use_extra_samples = args.use_extra_samples
 
     log_folder = args.log_folder
 
