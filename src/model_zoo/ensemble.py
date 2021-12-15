@@ -13,6 +13,9 @@ from model_zoo.custom_head_functions import get_rpn_boxes, get_seg_masks
 from model_zoo.merging import merge_aug_bboxes, single_class_boxes_nms
 
 
+DELTA = 0.5  # Modify this to change the TTA shift
+
+
 class EnsembleModel(BaseDetector):
     """
     Wrapper to ensemble models.
@@ -292,6 +295,14 @@ class EnsembleModel(BaseDetector):
                 )
                 rois = bbox2roi([proposals])
 
+                # Seems useful
+                if flip_direction in ['vertical', 'diagonal']:
+                    rois[:, 2] = torch.clamp(rois[:, 2] - DELTA, 0, img_shape[0])
+                    rois[:, 4] = torch.clamp(rois[:, 4] - DELTA, 0, img_shape[0])
+                if flip_direction in ['horizontal', 'diagonal']:
+                    rois[:, 1] = torch.clamp(rois[:, 1] - DELTA, 0, img_shape[1])
+                    rois[:, 3] = torch.clamp(rois[:, 3] - DELTA, 0, img_shape[1])
+
                 bboxes, scores = wrapper.get_boxes(
                     model, fts, rois, img_shape, scale_factor, img_meta, self.config['num_classes']
                 )
@@ -335,7 +346,7 @@ class EnsembleModel(BaseDetector):
         Args:
             features (list of torch tensors [n_models x n_tta x n_ft]): Encoder / FPN features.
             img_metas (list of dicts [n_tta]): List of MMDet image metadata.
-            det_bboxes (torch tensor [m x 5): Boxes & confidences.
+            det_bboxes (torch tensor [m x 5]): Boxes & confidences.
             det_labels (torch tensor [m]): Labels.
 
         Returns:
@@ -346,6 +357,7 @@ class EnsembleModel(BaseDetector):
 
         for i, (wrapper, model) in enumerate(zip(self.wrappers, self.models)):
             for fts, img_meta in zip(features[i][:2], img_metas[:2]):
+                # for fts, img_meta in zip(features[i], img_metas):
                 fts = [ft.cuda() for ft in fts]
                 img_shape = img_meta[0]["img_shape"]
                 scale_factor = img_meta[0]["scale_factor"]
@@ -356,6 +368,14 @@ class EnsembleModel(BaseDetector):
                     det_bboxes[:, :4], img_shape, scale_factor, flip, flip_direction
                 )
                 mask_rois = bbox2roi([_bboxes])
+
+                # Seems to help
+                if flip_direction in ['vertical', 'diagonal']:
+                    mask_rois[:, 2] = torch.clamp(mask_rois[:, 2] - DELTA, 0, img_shape[0])
+                    mask_rois[:, 4] = torch.clamp(mask_rois[:, 4] - DELTA, 0, img_shape[0])
+                if flip_direction in ['horizontal', 'diagonal']:
+                    mask_rois[:, 1] = torch.clamp(mask_rois[:, 1] - DELTA, 0, img_shape[1])
+                    mask_rois[:, 3] = torch.clamp(mask_rois[:, 3] - DELTA, 0, img_shape[1])
 
                 masks = wrapper.get_masks(model, fts, mask_rois, self.config['num_classes'])
 
