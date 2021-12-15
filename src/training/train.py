@@ -9,6 +9,7 @@ from training.optim import define_optimizer, define_scheduler
 from inference.predict import predict
 from utils.metrics import quick_eval_results
 from utils.torch import freeze_batchnorm
+from training.custom_loss import custom_parse_losses
 
 
 def fit(
@@ -33,6 +34,7 @@ def fit(
     use_extra_samples=False,
     freeze_bn=False,
     device="cuda",
+    loss_decay=True,
 ):
     """
     Training function.
@@ -102,7 +104,10 @@ def fit(
 
         for batch in train_loader:
             losses = model(**batch, return_loss=True)
-            loss, _ = model.module._parse_losses(losses)
+            if loss_decay:
+                loss, _ = custom_parse_losses(losses, epoch, epochs+1)
+            else:
+                loss, _ = model.module._parse_losses(losses)
 
             loss.backward()
             avg_loss += loss.item() / len(train_loader)
@@ -124,8 +129,10 @@ def fit(
                 with torch.no_grad():
                     for batch in val_loader:
                         losses = model(**batch, return_loss=True)
-                        loss, _ = model.module._parse_losses(losses)
-
+                        if loss_decay:
+                            loss, _ = custom_parse_losses(losses, epoch, epochs+1)
+                        else:
+                            loss, _ = model.module._parse_losses(losses)
                         avg_val_loss += loss.item() / len(val_loader)
 
             results = predict(

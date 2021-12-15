@@ -134,7 +134,7 @@ def get_splits(df, config):
         sgkf = StratifiedGroupKFold(
             n_splits=config.k, shuffle=True, random_state=config.random_state
         )
-        splits = list(sgkf.split(X=df, y=df["cell_type"], groups=df["sample_id"]))
+        splits = list(sgkf.split(X=df, y=df["cell_type"], groups=df["plate_well"]))
     elif config.split == "gkf":
         gkf = GroupKFold(n_splits=config.k)
         splits = list(gkf.split(X=df, groups=df["plate_well"]))
