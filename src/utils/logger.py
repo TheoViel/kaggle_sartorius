@@ -97,7 +97,7 @@ def save_config(config, folder):
     shutil.copyfile(backbone_config_file_old, backbone_config_file)
 
     config.data_config = data_config_file
-    config.model_config_file = model_config_file
+    config.model_config = model_config_file
 
     dic = config.__dict__.copy()
     del dic["__doc__"], dic["__module__"], dic["__dict__"], dic["__weakref__"]

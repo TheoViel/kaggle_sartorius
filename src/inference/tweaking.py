@@ -89,8 +89,10 @@ def tweak_thresholds(
     thresholds_mask,
     thresholds_nms,
     thresholds_conf,
+    num_classes=3,
     remove_overlap=True,
-    corrupt=True
+    corrupt=True,
+    cell_types=None
 ):
     """
     Function to tweak thresholds for masks, nms and confidence.
@@ -101,19 +103,27 @@ def tweak_thresholds(
         thresholds_mask (list of floats): Mask thresholds.
         thresholds_nms (list of floats): NMS thresholds
         thresholds_conf (list of floats): Confidence thresholds.
+        num_classes (int, optional): Number of classes. Defaults to 3.
         remove_overlap (bool, optional): Whether to remove overlap.. Defaults to True.
         corrupt (bool, optional): Whether to corrupt astro cells. Defaults to True.
+        cell_types (int, optional): Class indices. Defaults to None.
 
     Returns:
         list of np arrays [3 x n_th_mask x n_th_nms x n_th_conf]: Scores per class for each config.
     """
-    scores = [[[[] for _ in thresholds_nms] for _ in thresholds_mask] for _ in range(3)]
+    scores = [[[[] for _ in thresholds_nms] for _ in thresholds_mask] for _ in range(num_classes)]
 
     for idx_mask, threshold_mask in enumerate(thresholds_mask):
-        for result, rle_truth in tqdm(zip(results, dataset.encodings), total=len(dataset)):
+        for idx, (result, rle_truth) in tqdm(
+            enumerate(zip(results, dataset.encodings)), total=len(dataset)
+        ):
             boxes, masks = result
 
-            cell_type = np.argmax(np.bincount(boxes[:, 5].astype(int)))
+            cell_type_pred = np.argmax(np.bincount(boxes[:, 5].astype(int)))
+            if cell_types is None:
+                cell_type = np.argmax(np.bincount(boxes[:, 5].astype(int)))
+            else:
+                cell_type = cell_types[idx]
 
             masks = masks > (threshold_mask * 255)
 
@@ -132,7 +142,7 @@ def tweak_thresholds(
             for idx_nms, pick in enumerate(picks):
                 masks_picked = masks[pick]
 
-                if corrupt and cell_type == 1:  # astro
+                if corrupt and cell_type_pred == 1:  # astro
                     masks_picked = np.array([corrupt_mask(mask)[0] for mask in masks_picked])
 
                 if remove_overlap:

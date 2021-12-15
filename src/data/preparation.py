@@ -3,7 +3,7 @@ import cv2
 import pycocotools
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold, StratifiedGroupKFold
+from sklearn.model_selection import StratifiedKFold, StratifiedGroupKFold, GroupKFold
 
 from utils.rle import rle_decode, rles_to_mask_fix
 from params import (
@@ -54,6 +54,10 @@ def prepare_data(fix=False, remove_anomalies=False):
 
     if remove_anomalies:
         df = df.loc[~df['id'].isin(WRONG_ANNOTATIONS)].reset_index(drop=True)
+
+    df['plate'] = df['sample_id'].apply(lambda x: x.split('_')[0])
+    df['well'] = df['sample_id'].apply(lambda x: x.split('_')[1][:-2])
+    df['plate_well'] = df['plate'] + "_" + df['well']
 
     return df
 
@@ -131,6 +135,9 @@ def get_splits(df, config):
             n_splits=config.k, shuffle=True, random_state=config.random_state
         )
         splits = list(sgkf.split(X=df, y=df["cell_type"], groups=df["sample_id"]))
+    elif config.split == "gkf":
+        gkf = GroupKFold(n_splits=config.k)
+        splits = list(gkf.split(X=df, groups=df["plate_well"]))
 
     return splits
 

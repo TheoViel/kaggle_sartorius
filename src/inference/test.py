@@ -179,7 +179,7 @@ def inference(
             model = define_model(
                 config.model_config, encoder=config.encoder, verbose=0
             )
-            model = load_model_weights(model, weight)
+            model = load_model_weights(model, weight, verbose=0)
             models.append(model)
             names.append(weight.split('/')[-1])
 

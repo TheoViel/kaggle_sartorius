@@ -11,7 +11,7 @@ BATCH_SIZES = {
         "resnet101": 4,
         "resnext101": 4,
         "efficientnet_b4": 4,
-        "efficientnet_b5": 3,  # 3
+        "efficientnet_b5": 3,
         "efficientnet_b6": 2,
     },
     "cascade": {
@@ -24,7 +24,7 @@ BATCH_SIZES = {
         "efficientnetv2_s": 4,
         "efficientnetv2_m": 3,
         "efficientnet_b4": 3,
-        "efficientnet_b5": 2,  # 3
+        "efficientnet_b5": 2,
         "efficientnet_b6": 2,
     },
     "cascade_resnest": {
@@ -34,10 +34,6 @@ BATCH_SIZES = {
     "cascade_mask_scoring": {
         "resnet50": 4,
         "resnext101": 3,
-        # "resnext101_64x4": 2,
-        # "swin_tiny": 4,
-        # "swin_small": 3,
-        # "swin_base": 2,
     },
     "htc": {
         "resnet50": 3,
@@ -126,22 +122,22 @@ class Config:
 
     extra_name = "livecell_no_shsy5y"
     use_extra_samples = False
-    use_pl = True
+    use_pl = False
 
     num_classes = 3
 
     data_config = "configs/config_aug.py"
-#     data_config = "configs/config_aug_extra.py"  # flip_paste
+    # data_config = "configs/config_aug_extra.py"  # flip_paste
 
     # k-fold
-    split = "sgkf"
+    split = "gkf"  # "sgkf"
     k = 5
     random_state = 0
     selected_folds = [0]
 
     # Model
     name = "cascade"  # "cascade" "maskrcnn"
-    encoder = "resnext101"
+    encoder = "efficientnet_b6"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
     freeze_bn = True
@@ -172,9 +168,6 @@ if __name__ == "__main__":
     config = Config
     config.selected_folds = [args.fold]
 
-    if args.epochs is not None:
-        config.epochs = args.epochs
-
     if args.lr is not None:
         config.lr = args.lr
 
@@ -194,6 +187,9 @@ if __name__ == "__main__":
     if args.encoder is not None or args.name is not None:
         config.batch_size = BATCH_SIZES[config.name][config.encoder]
         config.epochs = 10 * config.batch_size
+
+    if args.epochs is not None:
+        config.epochs = args.epochs
 
     log_folder = args.log_folder
 

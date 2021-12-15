@@ -14,7 +14,7 @@ from utils.torch import load_model_weights
 from inference.predict import predict
 
 
-def inference_val(df, configs, weights, ens_config):
+def inference_val(df, configs, weights, ens_config, verbose=1, cell_type=None):
     """
     Inference on the validation data.
 
@@ -23,6 +23,8 @@ def inference_val(df, configs, weights, ens_config):
         configs (list of Config): Model configs.
         weights (list of list of strings): Model weights.
         ens_config (dict): Parameters for the ensemble model.
+        verbose (int, optional): Verbosity. Defaults to 1.
+        cell_type (str, optional): Cells to consider. Defaults to None.
 
     Returns:
         list of tuples: Results in the MMDet format [(boxes, masks), ...].
@@ -40,6 +42,10 @@ def inference_val(df, configs, weights, ens_config):
     all_results, dfs = [], []
     for i, (train_idx, val_idx) in enumerate(splits):
         df_val = df.iloc[val_idx].copy().reset_index(drop=True)
+
+        if cell_type is not None:
+            df_val = df_val[df_val['cell_type'] == cell_type].reset_index(drop=True)
+
         dfs.append(df_val)
 
         dataset = SartoriusDataset(
@@ -50,7 +56,7 @@ def inference_val(df, configs, weights, ens_config):
         for model_idx, model in enumerate(models):
             weight = weights[model_idx][i]
             assert weight.endswith(f'_{i}.pt'), "Wrong model weights"
-            models_trained.append(load_model_weights(model, weight))
+            models_trained.append(load_model_weights(model, weight, verbose=verbose))
             names.append(weight.split('/')[-1])
 
         model = MMDataParallel(
