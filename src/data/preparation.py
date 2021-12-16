@@ -103,7 +103,7 @@ def prepare_pl_data(name):
 
     df['cell_type'] = df['cell_type'].apply(lambda x: x.lower())
 
-    df['img_path'] = DATA_PATH + "train_semi_supervised/" + df['filename'].apply(lambda x: x[:-4])
+    df['img_path'] = DATA_PATH + "train_semi_supervised/" + df['filename']
 
     df['ann'] = df['ann'].apply(ast.literal_eval)
 
