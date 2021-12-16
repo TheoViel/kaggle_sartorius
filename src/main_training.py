@@ -130,10 +130,10 @@ class Config:
     # data_config = "configs/config_aug_extra.py"  # flip_paste
 
     # k-fold
-    split = "gkf"  # "sgkf"
+    split = "gkf"
     k = 5
     random_state = 0
-    selected_folds = [0]
+    selected_folds = [0, 1, 2, 3, 4]
 
     # Model
     name = "cascade"  # "cascade" "maskrcnn"
@@ -151,6 +151,7 @@ class Config:
     weight_decay = 0.01 if optimizer == "AdamW" else 0
     batch_size = BATCH_SIZES[name][encoder]
     val_bs = batch_size
+    loss_decay = True
 
     epochs = 10 * batch_size
     if use_pl or use_extra_samples:
