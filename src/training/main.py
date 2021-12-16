@@ -124,7 +124,7 @@ def k_fold(config, log_folder=None):
                 df_train = df.iloc[train_idx].copy().reset_index(drop=True)
 
             if config.use_pl:
-                df_extra = prepare_pl_data(f"pl_ens15_{i}")
+                df_extra = prepare_pl_data(f"pl_ensnew_{i}")
 
             df_val = df.iloc[val_idx].copy().reset_index(drop=True)
 

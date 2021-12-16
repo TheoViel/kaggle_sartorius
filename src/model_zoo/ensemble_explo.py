@@ -16,6 +16,59 @@ from model_zoo.merging import merge_aug_bboxes, single_class_boxes_nms
 DELTA = 0.5
 
 
+class AutomatedShiftFix(nn.Module):
+    def __init__(self, min_shift_x=0, max_shift_x=0, min_shift_y=0, max_shift_y=0):
+        super().__init__()
+        self.shifts_x = np.arange(min_shift_x, max_shift_x + 1)
+        self.shifts_y = np.arange(min_shift_y, max_shift_y + 1)
+
+    @staticmethod
+    def compute_similarities(x, xs):
+        return (xs * x.unsqueeze(0)).sum((1, 2, 3))
+
+    @staticmethod
+    def shift(x, shifts):
+        if shifts == (0, 0):
+            return x
+
+        shifted = torch.roll(x, shifts=shifts, dims=(1, 2))
+
+        shift_x, shift_y = shifts
+        if shift_x > 0:
+            shifted[:, :shift_x] = 0
+        elif shift_x < 0:
+            shifted[:, shift_x:] = 0
+        if shift_y > 0:
+            shifted[:, :, :shift_y] = 0
+        elif shift_y < 0:
+            shifted[:, :, shift_y:] = 0
+
+        return shifted
+
+    def build_shifted(self, x):
+        xs, shifts = [], []
+        for shift_x in self.shifts_x:
+            for shift_y in self.shifts_y:
+                shifted = self.shift(x, shifts=(shift_x, shift_y))
+                xs.append(shifted)
+                shifts.append((shift_x, shift_y))
+        xs = torch.stack(xs)
+        return xs, shifts
+
+    def forward(self, x_ref, x):
+        xs, shifts = [], []
+        for i in range(x.size(0)):
+
+            xs_, shifts_ = self.build_shifted(x[i])
+            sims = self.compute_similarities(x_ref[i], xs_)
+            best = sims.argmax()
+
+            xs.append(xs_[best].cpu().numpy())
+            shifts.append(shifts_[best])
+
+        return np.array(xs), shifts
+
+
 class EnsembleModel(BaseDetector):
     """
     Wrapper to ensemble models.
@@ -41,6 +94,12 @@ class EnsembleModel(BaseDetector):
 
         self.wrappers = get_wrappers(self.names)
         self.get_configs()
+
+        self.shifters = {
+            "horizontal": AutomatedShiftFix(max_shift_y=1),
+            "vertical": AutomatedShiftFix(max_shift_x=1),
+            "diagonal": AutomatedShiftFix(max_shift_x=1, max_shift_y=1),
+        }
 
     def get_configs(self):
         """
@@ -296,12 +355,12 @@ class EnsembleModel(BaseDetector):
                 rois = bbox2roi([proposals])
 
                 # Seems useful
-                if flip_direction in ['vertical', 'diagonal']:
-                    rois[:, 2] = torch.clamp(rois[:, 2] - DELTA, 0, img_shape[0])
-                    rois[:, 4] = torch.clamp(rois[:, 4] - DELTA, 0, img_shape[0])
-                if flip_direction in ['horizontal', 'diagonal']:
-                    rois[:, 1] = torch.clamp(rois[:, 1] - DELTA, 0, img_shape[1])
-                    rois[:, 3] = torch.clamp(rois[:, 3] - DELTA, 0, img_shape[1])
+                # if flip_direction in ['vertical', 'diagonal']:
+                #     rois[:, 2] = torch.clamp(rois[:, 2] - DELTA, 0, img_shape[0])
+                #     rois[:, 4] = torch.clamp(rois[:, 4] - DELTA, 0, img_shape[0])
+                # if flip_direction in ['horizontal', 'diagonal']:
+                #     rois[:, 1] = torch.clamp(rois[:, 1] - DELTA, 0, img_shape[1])
+                #     rois[:, 3] = torch.clamp(rois[:, 3] - DELTA, 0, img_shape[1])
 
                 bboxes, scores = wrapper.get_boxes(
                     model, fts, rois, img_shape, scale_factor, img_meta, self.config['num_classes']
@@ -377,14 +436,22 @@ class EnsembleModel(BaseDetector):
                     )
                     mask_rois = bbox2roi([_bboxes])
 
-                    if flip_direction in ['vertical', 'diagonal']:
-                        mask_rois[:, 2] = torch.clamp(mask_rois[:, 2] - DELTA, 0, img_shape[0])
-                        mask_rois[:, 4] = torch.clamp(mask_rois[:, 4] - DELTA, 0, img_shape[0])
-                    if flip_direction in ['horizontal', 'diagonal']:
-                        mask_rois[:, 1] = torch.clamp(mask_rois[:, 1] - DELTA, 0, img_shape[1])
-                        mask_rois[:, 3] = torch.clamp(mask_rois[:, 3] - DELTA, 0, img_shape[1])
+                    # if flip_direction in ['vertical', 'diagonal']:
+                    #     mask_rois[:, 2] = torch.clamp(mask_rois[:, 2] - DELTA, 0, img_shape[0])
+                    #     mask_rois[:, 4] = torch.clamp(mask_rois[:, 4] - DELTA, 0, img_shape[0])
+                    # if flip_direction in ['horizontal', 'diagonal']:
+                    #     mask_rois[:, 1] = torch.clamp(mask_rois[:, 1] - DELTA, 0, img_shape[1])
+                    #     mask_rois[:, 3] = torch.clamp(mask_rois[:, 3] - DELTA, 0, img_shape[1])
 
                     masks = wrapper.get_masks(model, fts, mask_rois, self.config['num_classes'])
+
+                    if flip_direction is None:
+                        masks_ref = torch.from_numpy(masks).cuda()
+                    else:
+                        masks, shifts = self.shifters[flip_direction](
+                            masks_ref, torch.from_numpy(masks).cuda()
+                        )
+                        print(flip_direction, 'flip - Applied shift :', shifts[m])
 
                     if flip_direction == 'horizontal':
                         mask_plot = masks[:, :, :, ::-1]

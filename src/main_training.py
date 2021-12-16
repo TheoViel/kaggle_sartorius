@@ -122,7 +122,7 @@ class Config:
 
     extra_name = "livecell_no_shsy5y"
     use_extra_samples = False
-    use_pl = False
+    use_pl = True
 
     num_classes = 3
 
@@ -137,10 +137,10 @@ class Config:
 
     # Model
     name = "cascade"  # "cascade" "maskrcnn"
-    encoder = "efficientnet_b6"
+    encoder = "resnext101"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
-    freeze_bn = True
+    freeze_bn = False  # True ?
 
     if name == "htc":
         data_config = "configs/config_aug_semantic.py"
