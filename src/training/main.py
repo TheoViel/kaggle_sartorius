@@ -82,7 +82,10 @@ def train(
         use_extra_samples=config.use_extra_samples or config.use_pl,
         freeze_bn=config.freeze_bn,
         device=config.device,
-        loss_decay=config.loss_decay
+        loss_decay=config.loss_decay,
+        config=config,
+        log_folder=log_folder,
+        fold=fold,
     )
 
     if config.save_weights and log_folder is not None:
