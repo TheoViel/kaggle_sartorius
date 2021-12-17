@@ -13,7 +13,7 @@ from model_zoo.custom_head_functions import get_rpn_boxes, get_seg_masks
 from model_zoo.merging import merge_aug_bboxes, single_class_boxes_nms
 
 
-DELTA = 0.5  # Modify this to change the TTA shift
+DELTA = 0 # 0.5  # Modify this to change the TTA shift
 
 
 class AutomatedShiftFix(nn.Module):
@@ -355,12 +355,12 @@ class EnsembleModel(BaseDetector):
                 rois = bbox2roi([proposals])
 
                 # # Not that useful ?
-                # if flip_direction in ['vertical', 'diagonal']:
-                #     rois[:, 2] = torch.clamp(rois[:, 2] - DELTA, 0, img_shape[0])
-                #     rois[:, 4] = torch.clamp(rois[:, 4] - DELTA, 0, img_shape[0])
-                # if flip_direction in ['horizontal', 'diagonal']:
-                #     rois[:, 1] = torch.clamp(rois[:, 1] - DELTA, 0, img_shape[1])
-                #     rois[:, 3] = torch.clamp(rois[:, 3] - DELTA, 0, img_shape[1])
+                if flip_direction in ['vertical', 'diagonal']:
+                    rois[:, 2] = torch.clamp(rois[:, 2] - DELTA, 0, img_shape[0])
+                    rois[:, 4] = torch.clamp(rois[:, 4] - DELTA, 0, img_shape[0])
+                if flip_direction in ['horizontal', 'diagonal']:
+                    rois[:, 1] = torch.clamp(rois[:, 1] - DELTA, 0, img_shape[1])
+                    rois[:, 3] = torch.clamp(rois[:, 3] - DELTA, 0, img_shape[1])
 
                 bboxes, scores = wrapper.get_boxes(
                     model, fts, rois, img_shape, scale_factor, img_meta, self.config['num_classes']
@@ -429,12 +429,12 @@ class EnsembleModel(BaseDetector):
                 mask_rois = bbox2roi([_bboxes])
 
                 # # Seems to help
-                # if flip_direction in ['vertical', 'diagonal']:
-                #     mask_rois[:, 2] = torch.clamp(mask_rois[:, 2] - DELTA, 0, img_shape[0])
-                #     mask_rois[:, 4] = torch.clamp(mask_rois[:, 4] - DELTA, 0, img_shape[0])
-                # if flip_direction in ['horizontal', 'diagonal']:
-                #     mask_rois[:, 1] = torch.clamp(mask_rois[:, 1] - DELTA, 0, img_shape[1])
-                #     mask_rois[:, 3] = torch.clamp(mask_rois[:, 3] - DELTA, 0, img_shape[1])
+                if flip_direction in ['vertical', 'diagonal']:
+                    mask_rois[:, 2] = torch.clamp(mask_rois[:, 2] - DELTA, 0, img_shape[0])
+                    mask_rois[:, 4] = torch.clamp(mask_rois[:, 4] - DELTA, 0, img_shape[0])
+                if flip_direction in ['horizontal', 'diagonal']:
+                    mask_rois[:, 1] = torch.clamp(mask_rois[:, 1] - DELTA, 0, img_shape[1])
+                    mask_rois[:, 3] = torch.clamp(mask_rois[:, 3] - DELTA, 0, img_shape[1])
 
                 masks = wrapper.get_masks(model, fts, mask_rois, self.config['num_classes'])
 

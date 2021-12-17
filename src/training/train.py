@@ -10,6 +10,7 @@ from inference.predict import predict
 from utils.metrics import quick_eval_results
 from utils.torch import freeze_batchnorm
 from training.custom_loss import custom_parse_losses
+from utils.torch import save_model_weights
 
 
 def fit(
@@ -35,6 +36,9 @@ def fit(
     freeze_bn=False,
     device="cuda",
     loss_decay=True,
+    config=None,
+    log_folder=None,
+    fold=None
 ):
     """
     Training function.
@@ -60,7 +64,10 @@ def fit(
         use_extra_samples (bool, optional): Whether to use extra samples. Defaults to False.
         freeze_bn (bool, optional): Whether to freeze batchnorm layers. Defaults to False.
         device (str, optional): Training device. Defaults to "cuda".
-
+        loss_decay (bool, optional): Whether to decay classification losses importance.
+        config (class, optional): config information of the model
+        log_folder (str, optional): path to the logs
+        fold (int, optional): fold number
     Returns:
         list of tuples: Results in the MMDet format [(boxes, masks), ...].
     """
@@ -145,6 +152,10 @@ def fit(
                 print()
                 pass
 
+        save_checkpoint = do_eval and (epoch >= 0.75*epochs) and (epoch != epochs) and (log_folder is not None)
+        if save_checkpoint:
+            checkpoint_name = f"{config.name}_{config.encoder}_{fold}_epoch_{epoch}.pt"
+            save_model_weights(model, checkpoint_name, cp_folder=log_folder)
         # Print infos
         dt += time.time() - start_time
         lr = scheduler.get_last_lr()[0]
