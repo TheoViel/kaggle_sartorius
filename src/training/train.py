@@ -1,13 +1,12 @@
 import gc
 import time
 import torch
-import traceback
 import numpy as np
+import torch.nn as nn
+from sklearn.metrics import accuracy_score
 
 from data.loader import define_loaders
 from training.optim import define_optimizer, define_scheduler
-from inference.predict import predict
-from utils.metrics import quick_eval_results
 from utils.torch import freeze_batchnorm
 
 
@@ -15,7 +14,6 @@ def fit(
     model,
     train_dataset,
     val_dataset,
-    predict_dataset,
     optimizer_name="Adam",
     scheduler_name="linear",
     epochs=50,
@@ -72,27 +70,15 @@ def fit(
         train_dataset, val_dataset, batch_size=batch_size, val_bs=val_bs
     )
 
-    if use_extra_samples:
-        # extra_scheduling = np.clip(  # PL -
-        #     [50 * (i ** (1 + 10 / epochs) // 5) for i in range(epochs)][::-1], 0, 1000
-        # ).astype(int)
-        extra_scheduling = np.clip(  # PL
-            [100 * (i ** (1 + 10 / epochs) // 5) for i in range(epochs)][::-1], 0, 1000
-        ).astype(int)
-
-        print(f"    -> Extra scheduling : {extra_scheduling.tolist()}\n")
-    else:
-        extra_scheduling = [0] * epochs
-        print()
-
     num_training_steps = (
-        len(train_dataset.img_paths) * epochs + np.sum(extra_scheduling)
+        len(train_dataset.img_paths) * epochs
     ) // batch_size
     num_warmup_steps = int(warmup_prop * num_training_steps)
     scheduler = define_scheduler(scheduler_name, optimizer, num_warmup_steps, num_training_steps)
 
+    ce_loss = nn.CrossEntropyLoss(reduction="none")
+
     for epoch in range(1, epochs + 1):
-        train_dataset.sample_extra_data(extra_scheduling[epoch - 1])
         model.train()
         if freeze_bn:
             freeze_batchnorm(model)
@@ -100,14 +86,16 @@ def fit(
         optimizer.zero_grad()
         avg_loss = 0
 
-        for batch in train_loader:
-            losses = model(**batch, return_loss=True)
-            loss, _ = model.module._parse_losses(losses)
+        for img, y_cell, y_plate in train_loader:
+            pred_cell, pred_plate = model(img.cuda())
+
+            loss = 0.5 * (
+                ce_loss(pred_cell, y_cell.cuda()) +
+                ce_loss(pred_plate, y_plate.cuda())
+            ).mean()
 
             loss.backward()
             avg_loss += loss.item() / len(train_loader)
-
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 10.)
 
             optimizer.step()
             scheduler.step()
@@ -116,27 +104,29 @@ def fit(
                 param.grad = None
 
         model.eval()
-        avg_val_loss, iou_map = 0, 0
+        avg_val_loss, cell_acc, plate_acc = 0, 0, 0
 
         do_eval = (epoch >= first_epoch_eval and not epoch % verbose_eval) or (epoch == epochs)
         if do_eval:
-            if compute_val_loss:
-                with torch.no_grad():
-                    for batch in val_loader:
-                        losses = model(**batch, return_loss=True)
-                        loss, _ = model.module._parse_losses(losses)
+            preds_cell, preds_plate = [], []
+            with torch.no_grad():
+                for img, y_cell, y_plate in val_loader:
+                    pred_cell, pred_plate = model(img.cuda())
+                    loss = 0.5 * (
+                        ce_loss(pred_cell.detach(), y_cell.cuda()) +
+                        ce_loss(pred_plate.detach(), y_plate.cuda())
+                    ).mean()
+                    avg_val_loss += loss.item() / len(val_loader)
 
-                        avg_val_loss += loss.item() / len(val_loader)
+                    pred_cell = pred_cell.softmax(-1).detach().cpu().numpy()
+                    pred_plate = pred_plate.softmax(-1).detach().cpu().numpy()
+                    preds_cell.append(pred_cell)
+                    preds_plate.append(pred_plate)
 
-            results = predict(
-                predict_dataset, model, batch_size=1, device=device, mode="val"
-            )
-            try:
-                iou_map, _ = quick_eval_results(predict_dataset, results, num_classes=num_classes)
-            except Exception:
-                traceback.print_exc()
-                print()
-                pass
+            preds_cell = np.concatenate(preds_cell, 0)
+            preds_plate = np.concatenate(preds_plate, 0)
+            cell_acc = accuracy_score(val_dataset.y_cell, preds_cell.argmax(-1))
+            plate_acc = accuracy_score(val_dataset.y_plate, preds_plate.argmax(-1))
 
         # Print infos
         dt += time.time() - start_time
@@ -144,14 +134,15 @@ def fit(
 
         string = f"Epoch {epoch:02d}/{epochs:02d} \t lr={lr:.1e}\t t={dt:.0f}s\tloss={avg_loss:.3f}"
         string = string + f"\t avg_val_loss={avg_val_loss:.3f}" if avg_val_loss else string
-        string = string + f"\t iou_map={iou_map:.3f}" if iou_map else string
+        string = string + f"\t cell_acc={cell_acc:.3f}" if cell_acc else string
+        string = string + f"\t plate_acc={plate_acc:.3f}" if plate_acc else string
 
         if verbose:
             print(string)
             dt = 0
 
-        del (loss, losses, batch)
+        del (loss, img, y_cell, y_plate)
         gc.collect()
         torch.cuda.empty_cache()
 
-    return results
+    return preds_cell, preds_plate

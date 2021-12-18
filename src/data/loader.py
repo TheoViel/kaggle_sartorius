@@ -1,5 +1,3 @@
-from functools import partial
-from mmcv.parallel import collate
 from torch.utils.data import DataLoader
 
 from utils.torch import worker_init_fn
@@ -32,7 +30,6 @@ def define_loaders(
             shuffle=True,
             drop_last=True,
             num_workers=min(num_workers, batch_size),
-            collate_fn=partial(collate, samples_per_gpu=batch_size),
             pin_memory=False,
             worker_init_fn=worker_init_fn
         )
@@ -42,7 +39,6 @@ def define_loaders(
             val_dataset,
             batch_size=val_bs,
             shuffle=False,
-            collate_fn=partial(collate, samples_per_gpu=batch_size),
             num_workers=min(num_workers, val_bs),
             pin_memory=True,
         )

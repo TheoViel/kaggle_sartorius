@@ -1,24 +1,28 @@
+import os
 import ast
-import cv2
-import pycocotools
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold, StratifiedGroupKFold
+from sklearn.model_selection import StratifiedKFold, GroupKFold
 
-from utils.rle import rle_decode, rles_to_mask_fix
-from params import (
-    DATA_PATH,
-    OUT_PATH,
-    TRAIN_IMG_PATH,
-    ORIG_SIZE,
-    LIVECELL_PATH,
-    LIVECELL_FOLDERS,
-    LIVECELL_CLASSES,
-    CELL_TYPES,
-    HCK_FIX_PATH
-)
+from params import DATA_PATH, OUT_PATH, TRAIN_IMG_PATH
+
 
 WRONG_ANNOTATIONS = ["03b27b381a5f", "e92c56871769", "eec79772cb99"]
+
+
+def plate_to_class(plate):
+    mapping = {
+        "astro[hippo]": 0,
+        "astros[cereb]": 1,
+        "cort[6-OHDA]": 2,
+        "cort[debris]": 4,
+        "cort[density]": 3,
+        "cort[oka-high]": 4,
+        "cort[oka-low]": 2,
+        "cort[pre-treat]": 3,
+        "shsy5y[diff]": 5,
+    }
+    return mapping[plate]
 
 
 def prepare_data(fix=False, remove_anomalies=False):
@@ -55,37 +59,18 @@ def prepare_data(fix=False, remove_anomalies=False):
     if remove_anomalies:
         df = df.loc[~df['id'].isin(WRONG_ANNOTATIONS)].reset_index(drop=True)
 
-    return df
+    df['plate'] = df['sample_id'].apply(lambda x: x.split('_')[0])
+    df['well'] = df['sample_id'].apply(lambda x: x.split('_')[1][:-2])
+    df['plate_well'] = df['plate'] + "_" + df['well']
 
+    df['plate_class'] = df['plate'].apply(plate_to_class)
 
-def prepare_extra_data(name):
-    """
-    Prepares the livecell data.
-
-    Args:
-        name (str): Name of the csv file.
-
-    Returns:
-        pandas DataFrame: metadata.
-    """
-    df = pd.read_csv(OUT_PATH + name + ".csv")
-
-    df['split'] = df['split'].apply(
-        lambda x: "livecell_test_images/" if x == "test" else "livecell_train_val_images/"
-    )
-    df['cell_type'] = df['cell_type'].apply(lambda x: x.lower())
-    df['cell_folder'] = df['cell_type'].apply(lambda x: LIVECELL_FOLDERS[LIVECELL_CLASSES.index(x)])
-
-    df['img_path'] = LIVECELL_PATH + df['split'] + df['cell_folder'] + "/" + df['filename']
-
-    df['ann'] = df['ann'].apply(ast.literal_eval)
-
-    df['is_extra'] = 1
+    df['is_extra'] = 0
 
     return df
 
 
-def prepare_pl_data(name):
+def prepare_extra_data():
     """
     Prepares the pseudo labeled data.
 
@@ -95,17 +80,23 @@ def prepare_pl_data(name):
     Returns:
         pandas DataFrame: metadata.
     """
-    df = pd.read_csv(OUT_PATH + name + ".csv")
 
-    df['cell_type'] = df['cell_type'].apply(lambda x: x.lower())
+    df_extra = pd.DataFrame({'id': os.listdir(DATA_PATH + "train_semi_supervised/")})
+    df_extra['predicted'] = ""
+    df_extra['img_path'] = DATA_PATH + "train_semi_supervised/" + df_extra['id']
 
-    df['img_path'] = DATA_PATH + "train_semi_supervised/" + df['filename'].apply(lambda x: x[:-4])
+    df_extra['plate'] = df_extra['id'].apply(lambda x: x.split('_')[0])
+    df_extra['well'] = df_extra['id'].apply(lambda x: x.split('_')[1][:-2])
+    df_extra['plate_well'] = df_extra['plate'] + "_" + df_extra['well']
 
-    df['ann'] = df['ann'].apply(ast.literal_eval)
+    df_extra['cell_type'] = df_extra['id'].apply(lambda x: x.split('[')[0])
+    df_extra['cell_type'] = df_extra['cell_type'].apply(lambda x: "astro" if x == "astros" else x)
 
-    df['is_extra'] = 1
+    df_extra['plate_class'] = df_extra['plate'].apply(plate_to_class)
 
-    return df
+    df_extra['is_extra'] = 1
+
+    return df_extra
 
 
 def get_splits(df, config):
@@ -125,99 +116,15 @@ def get_splits(df, config):
         skf = StratifiedKFold(
             n_splits=config.k, shuffle=True, random_state=config.random_state
         )
-        splits = list(skf.split(X=df, y=df["cell_type"]))
+        splits = list(skf.split(X=df, y=df["plate"]))
     elif config.split == "sgkf":
-        sgkf = StratifiedGroupKFold(
-            n_splits=config.k, shuffle=True, random_state=config.random_state
-        )
-        splits = list(sgkf.split(X=df, y=df["cell_type"], groups=df["sample_id"]))
+        raise NotImplementedError
+        # sgkf = StratifiedGroupKFold(
+        #     n_splits=config.k, shuffle=True, random_state=config.random_state
+        # )
+        # splits = list(sgkf.split(X=df, y=df["cell_type"], groups=df["sample_id"]))
+    elif config.split == "gkf":
+        gkf = GroupKFold(n_splits=config.k)
+        splits = list(gkf.split(X=df, groups=df["plate_well"]))
 
     return splits
-
-
-def prepare_mmdet_data(df, idx, fix=True):
-    """
-    Processes the training data for mmdet.
-
-    Args:
-        df (pandas DataFrame): Train data.
-        idx (int): Row to process.
-        fix (bool, optional): Whether to fix masks. Defaults to True.
-
-    Returns:
-        np array: Masks.
-        dict: Prepared data.
-    """
-    height, width = df[["height", "width"]].values[idx]
-    cell_type = df['cell_type'][idx]
-
-    rles = df['annotation'][idx]
-
-    masks = rles_to_mask_fix(rles, (height, width), single_channel=False, fix=fix)
-
-    if fix:
-        mask_fix = cv2.imread(HCK_FIX_PATH + df['id'][idx] + ".png")
-        if mask_fix is not None:
-            masks = masks * (mask_fix[:, :, 2] > 0)[None]
-
-    rles = [pycocotools.mask.encode(np.asfortranarray(m > 0)) for m in masks]
-
-    bboxes = np.array([pycocotools.mask.toBbox(rle) for rle in rles])
-    bboxes[:, 2] += bboxes[:, 0]
-    bboxes[:, 3] += bboxes[:, 1]
-
-    meta = {
-        'filename': df['id'][idx] + ".png",
-        'width': int(width),
-        'height': int(height),
-        'cell_type': cell_type,
-        'ann': {
-            'bboxes': bboxes.astype(int).tolist(),
-            'labels': [CELL_TYPES.index(cell_type)] * len(bboxes),
-            'masks': rles
-        }
-    }
-    return masks, meta
-
-
-def sub_to_mmdet(df, idx):
-    """
-    Adapts data in the submission format to the mmdet format.
-    Used for pseudo labels.
-
-    Args:
-        df (pandas DataFrame): Data.
-        idx (int): Row to process.
-
-    Returns:
-        np array: Masks.
-        dict: Prepared data.
-    """
-    height, width = ORIG_SIZE
-    cell_type = df['id'][idx].split('[')[0]
-
-    if cell_type == "astros":
-        cell_type = "astro"
-
-    cell_type_idx = CELL_TYPES.index(cell_type) if cell_type in CELL_TYPES else -1
-
-    rles = df['predicted'][idx]
-    masks = np.array([rle_decode(enc, ORIG_SIZE) for enc in rles])
-    rles = [pycocotools.mask.encode(np.asfortranarray(m > 0)) for m in masks]
-
-    bboxes = np.array([pycocotools.mask.toBbox(rle) for rle in rles])
-    bboxes[:, 2] += bboxes[:, 0]
-    bboxes[:, 3] += bboxes[:, 1]
-
-    meta = {
-        'filename': df['id'][idx],
-        'width': int(width),
-        'height': int(height),
-        'cell_type': cell_type,
-        'ann': {
-            'bboxes': bboxes.astype(int).tolist(),
-            'labels': [cell_type_idx] * len(bboxes),
-            'masks': rles
-        }
-    }
-    return masks, meta

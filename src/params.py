@@ -3,7 +3,7 @@
 import torch
 import numpy as np
 
-NUM_WORKERS = 0
+NUM_WORKERS = 4
 
 DATA_PATH = "../input/"
 TRAIN_IMG_PATH = DATA_PATH + "train/"
@@ -21,9 +21,31 @@ NUM_CLASSES = len(CELL_TYPES)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 ORIG_SIZE = (520, 704)
+SIZE = 256
 
 LIVECELL_PATH = DATA_PATH + "LIVECell_dataset_2021/images/"
-LIVECELL_CLASSES = ['skbr3', 'a172', 'huh7', 'bv2', 'mcf7', 'bt474', 'skov3', 'shsy5y']
-LIVECELL_FOLDERS = ['SkBr3', 'A172', 'Huh7', 'BV2', 'MCF7', 'BT474', 'SKOV3', 'SHSY5Y']
+LIVECELL_CLASSES = ["skbr3", "a172", "huh7", "bv2", "mcf7", "bt474", "skov3", "shsy5y"]
+LIVECELL_FOLDERS = ["SkBr3", "A172", "Huh7", "BV2", "MCF7", "BT474", "SKOV3", "SHSY5Y"]
 
 MAX_CELLS_PER_IMG = [800, 600, 150]
+
+PLATES = [
+    "astro[hippo]",
+    "astros[cereb]",
+    "cort[6-OHDA]",
+    "cort[debris]",
+    "cort[density]",
+    "cort[oka-high]",
+    "cort[oka-low]",
+    "cort[pre-treat]",
+    "shsy5y[diff]",
+]
+
+PLATE_CLASSES = [
+    "astro[hippo]",
+    "astros[cereb]",
+    "cort[6-OHDA_oka-low]",
+    "cort[density_pre-treat]",
+    "cort[oka-high_debris]",
+    "shsy5y",
+]

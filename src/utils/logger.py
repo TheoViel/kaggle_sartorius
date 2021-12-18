@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import shutil
 import datetime
 import numpy as np
 
@@ -86,19 +85,6 @@ def save_config(config, folder):
         config (Config): Config.
         folder (str): Folder to save at.
     """
-    data_config_file = folder + config.data_config.split('/')[-1]
-    model_config_file = folder + config.model_config.split('/')[-1]
-
-    backbone_config_file_old = config.model_config.rsplit('/', 1)[0] + "/config_backbones.py"
-    backbone_config_file = folder + "config_backbones.py"
-
-    shutil.copyfile(config.data_config, data_config_file)
-    shutil.copyfile(config.model_config, model_config_file)
-    shutil.copyfile(backbone_config_file_old, backbone_config_file)
-
-    config.data_config = data_config_file
-    config.model_config_file = model_config_file
-
     dic = config.__dict__.copy()
     del dic["__doc__"], dic["__module__"], dic["__dict__"], dic["__weakref__"]
 
