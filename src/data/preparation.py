@@ -25,7 +25,24 @@ def plate_to_class(plate):
     return mapping[plate]
 
 
-def prepare_data(fix=False, remove_anomalies=False):
+def prepare_target(df, df_extra):
+    gkf = GroupKFold(n_splits=5)
+    splits = list(gkf.split(X=df, groups=df["plate_well"]))
+
+    for i, (train_idx, val_idx) in enumerate(splits):
+        y = np.zeros(len(df))
+        y[val_idx] = 1
+        df[f'target_{i}'] = y
+
+        val_plate_well = df.iloc[val_idx]['plate_well'].unique()
+
+        y_extra = [float(pw in val_plate_well) for pw in df_extra["plate_well"].values]
+        df_extra[f'target_{i}'] = y_extra
+
+    return df, df_extra
+
+
+def prepare_data(fix=False, remove_anomalies=True):
     """
     Prepares the data for training and validation.
 
@@ -64,8 +81,6 @@ def prepare_data(fix=False, remove_anomalies=False):
     df['plate_well'] = df['plate'] + "_" + df['well']
 
     df['plate_class'] = df['plate'].apply(plate_to_class)
-
-    df['is_extra'] = 0
 
     return df
 

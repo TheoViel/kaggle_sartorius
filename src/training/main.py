@@ -1,11 +1,11 @@
 import numpy as np
-import pandas as pd
+# import pandas as pd
 
 from training.train import fit
 from model_zoo.models import define_model
 from data.dataset import SartoriusDataset
 from data.transforms import get_transfos
-from data.preparation import prepare_data, get_splits, prepare_extra_data
+from data.preparation import prepare_data, prepare_target, prepare_extra_data
 from utils.torch import seed_everything, count_parameters, save_model_weights, freeze_batchnorm
 
 
@@ -33,7 +33,6 @@ def train(
     model = define_model(
         config.encoder,
         num_classes=config.num_classes,
-        num_classes_aux=config.num_classes_aux,
     ).to(config.device)
     model.zero_grad()
 
@@ -55,7 +54,7 @@ def train(
     print(f"    -> {len(val_dataset)} validation images")
     print(f"    -> {n_parameters} trainable parameters\n")
 
-    preds_cell, preds_plate = fit(
+    preds = fit(
         model,
         train_dataset,
         val_dataset,
@@ -80,7 +79,7 @@ def train(
         name = f"{config.encoder}_{fold}.pt"
         save_model_weights(model, name, cp_folder=log_folder)
 
-    return preds_cell, preds_plate
+    return preds
 
 
 def k_fold(config, log_folder=None):
@@ -94,34 +93,26 @@ def k_fold(config, log_folder=None):
     Returns:
         list of tuples: Results in the MMDet format [(boxes, masks), ...].
     """
-    df = prepare_data(fix=False, remove_anomalies=config.remove_anomalies)
+    df = prepare_data(fix=False, remove_anomalies=True)
     df_extra = prepare_extra_data()
-    df = pd.concat([df, df_extra]).reset_index(drop=True)
 
-    splits = get_splits(df, config)
+    df, df_extra = prepare_target(df, df_extra)
 
-    preds_cell_oof = np.zeros((len(df), config.num_classes))
-    preds_plate_oof = np.zeros((len(df), config.num_classes_aux))
+    all_preds = []
 
-    for i, (train_idx, val_idx) in enumerate(splits):
+    for i in range(config.k):
         if i in config.selected_folds:
             print(f"\n-------------   Fold {i + 1} / {config.k}  -------------\n")
 
-            df_train = df.iloc[train_idx].copy().reset_index(drop=True)
-            df_val = df.iloc[val_idx].copy().reset_index(drop=True)
+            df['target'] = df[f'target_{i}']
+            df_extra['target'] = df_extra[f'target_{i}']
 
-            preds_cell, preds_plate = train(
-                config, df_train, df_val, i, log_folder=log_folder
+            preds = train(
+                config, df, df_extra, i, log_folder=log_folder
             )
-
-            preds_cell_oof[val_idx] = preds_cell
-            preds_plate_oof[val_idx] = preds_plate
-
-            if len(config.selected_folds) == 1:
-                return preds_cell, preds_plate
+            all_preds.append(preds)
 
     if log_folder is not None:
-        np.save(log_folder + "preds_cell_oof.npy", preds_cell_oof)
-        np.save(log_folder + "preds_plate_oof.npy", preds_plate_oof)
+        np.save(log_folder + "preds.npy", np.array(all_preds))
 
-    return preds_cell_oof, preds_plate_oof
+    return all_preds

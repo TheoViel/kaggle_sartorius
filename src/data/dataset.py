@@ -2,8 +2,6 @@ import cv2
 import torch
 from torch.utils.data import Dataset
 
-from params import CELL_TYPES
-
 
 class SartoriusDataset(Dataset):
     """
@@ -26,8 +24,7 @@ class SartoriusDataset(Dataset):
         self.cell_types = df["cell_type"].values
         self.plates = df["plate_class"].values
 
-        self.y_cell = [CELL_TYPES.index(c) for c in self.cell_types]
-        self.y_plate = df["plate_class"].values
+        self.y = df["target"].values
 
     def __len__(self):
         return self.df.shape[0]
@@ -39,7 +36,6 @@ class SartoriusDataset(Dataset):
             transformed = self.transforms(image=image)
             image = transformed["image"]
 
-        y_cell = torch.tensor(self.y_cell[idx]).long()
-        y_plate = torch.tensor(self.y_plate[idx]).long()
+        y = torch.tensor(self.y[idx])
 
-        return image, y_cell, y_plate
+        return image, y

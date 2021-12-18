@@ -76,7 +76,8 @@ def fit(
     num_warmup_steps = int(warmup_prop * num_training_steps)
     scheduler = define_scheduler(scheduler_name, optimizer, num_warmup_steps, num_training_steps)
 
-    ce_loss = nn.CrossEntropyLoss(reduction="none")
+    bce = nn.BCEWithLogitsLoss(reduction="none", pos_weight=5 * torch.ones((1)).cuda())
+    # bce = nn.BCEWithLogitsLoss(reduction="none")
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -86,13 +87,10 @@ def fit(
         optimizer.zero_grad()
         avg_loss = 0
 
-        for img, y_cell, y_plate in train_loader:
-            pred_cell, pred_plate = model(img.cuda())
+        for img, y in train_loader:
+            pred = model(img.cuda())
 
-            loss = 0.5 * (
-                ce_loss(pred_cell, y_cell.cuda()) +
-                ce_loss(pred_plate, y_plate.cuda())
-            ).mean()
+            loss = bce(pred, y.cuda()).mean()
 
             loss.backward()
             avg_loss += loss.item() / len(train_loader)
@@ -104,29 +102,22 @@ def fit(
                 param.grad = None
 
         model.eval()
-        avg_val_loss, cell_acc, plate_acc = 0, 0, 0
+        avg_val_loss, acc = 0, 0
 
         do_eval = (epoch >= first_epoch_eval and not epoch % verbose_eval) or (epoch == epochs)
         if do_eval:
-            preds_cell, preds_plate = [], []
+            preds = []
             with torch.no_grad():
-                for img, y_cell, y_plate in val_loader:
-                    pred_cell, pred_plate = model(img.cuda())
-                    loss = 0.5 * (
-                        ce_loss(pred_cell.detach(), y_cell.cuda()) +
-                        ce_loss(pred_plate.detach(), y_plate.cuda())
-                    ).mean()
+                for img, y in val_loader:
+                    pred = model(img.cuda())
+                    loss = bce(pred.detach(), y.cuda()).mean()
                     avg_val_loss += loss.item() / len(val_loader)
 
-                    pred_cell = pred_cell.softmax(-1).detach().cpu().numpy()
-                    pred_plate = pred_plate.softmax(-1).detach().cpu().numpy()
-                    preds_cell.append(pred_cell)
-                    preds_plate.append(pred_plate)
+                    preds.append(pred.sigmoid().detach().cpu().numpy())
 
-            preds_cell = np.concatenate(preds_cell, 0)
-            preds_plate = np.concatenate(preds_plate, 0)
-            cell_acc = accuracy_score(val_dataset.y_cell, preds_cell.argmax(-1))
-            plate_acc = accuracy_score(val_dataset.y_plate, preds_plate.argmax(-1))
+            preds = np.concatenate(preds, 0)
+
+            acc = accuracy_score(val_dataset.y, preds > 0.5)
 
         # Print infos
         dt += time.time() - start_time
@@ -134,15 +125,14 @@ def fit(
 
         string = f"Epoch {epoch:02d}/{epochs:02d} \t lr={lr:.1e}\t t={dt:.0f}s\tloss={avg_loss:.3f}"
         string = string + f"\t avg_val_loss={avg_val_loss:.3f}" if avg_val_loss else string
-        string = string + f"\t cell_acc={cell_acc:.3f}" if cell_acc else string
-        string = string + f"\t plate_acc={plate_acc:.3f}" if plate_acc else string
+        string = string + f"\t acc={acc:.3f}" if acc else string
 
         if verbose:
             print(string)
             dt = 0
 
-        del (loss, img, y_cell, y_plate)
+        del (loss, img, y)
         gc.collect()
         torch.cuda.empty_cache()
 
-    return preds_cell, preds_plate
+    return preds

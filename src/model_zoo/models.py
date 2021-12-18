@@ -3,7 +3,7 @@ import torch.nn as nn
 from model_zoo.encoders import get_encoder
 
 
-def define_model(name, num_classes=3, num_classes_aux=9):
+def define_model(name, num_classes=1):
     """
     Loads the model.
     Args:
@@ -13,12 +13,12 @@ def define_model(name, num_classes=3, num_classes_aux=9):
         torch model: Model.
     """
     encoder = get_encoder(name)
-    model = SartoriusModel(encoder, num_classes=num_classes, num_classes_aux=num_classes_aux)
+    model = SartoriusModel(encoder, num_classes=num_classes)
     return model
 
 
 class SartoriusModel(nn.Module):
-    def __init__(self, encoder, num_classes=1, num_classes_aux=1):
+    def __init__(self, encoder, num_classes=1):
         """
         Constructor.
         Args:
@@ -33,7 +33,6 @@ class SartoriusModel(nn.Module):
         self.std = encoder.std
 
         self.logits = nn.Linear(self.nb_ft, num_classes)
-        self.logits_aux = nn.Linear(self.nb_ft, num_classes_aux)
 
     def forward(self, x):
         """
@@ -50,6 +49,5 @@ class SartoriusModel(nn.Module):
         pooled = x4.mean(-1).mean(-1)
 
         logits = self.logits(pooled)
-        logits_aux = self.logits_aux(pooled)
 
-        return logits, logits_aux
+        return logits.squeeze()
