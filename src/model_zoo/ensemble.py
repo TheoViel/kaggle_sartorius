@@ -15,7 +15,6 @@ from model_zoo.merging import merge_aug_bboxes, single_class_boxes_nms
 
 DELTA = 0.  # Modify this to change the TTA shift
 
-
 class EnsembleModel(BaseDetector):
     """
     Wrapper to ensemble models.
@@ -308,7 +307,6 @@ class EnsembleModel(BaseDetector):
                 )
                 rois = bbox2roi([proposals])
 
-                # Not that useful ?
                 if DELTA:
                     if flip_direction in ['vertical', 'diagonal']:
                         rois[:, 2] = torch.clamp(rois[:, 2] - DELTA, 0, img_shape[0])
@@ -389,7 +387,6 @@ class EnsembleModel(BaseDetector):
                 )
                 mask_rois = bbox2roi([_bboxes])
 
-                # Seems to help
                 if DELTA:
                     if flip_direction in ['vertical', 'diagonal']:
                         mask_rois[:, 2] = torch.clamp(mask_rois[:, 2] - DELTA, 0, img_shape[0])
