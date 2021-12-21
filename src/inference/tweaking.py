@@ -89,10 +89,9 @@ def tweak_thresholds(
     thresholds_mask,
     thresholds_nms,
     thresholds_conf,
-    num_classes=3,
     remove_overlap=True,
     corrupt=True,
-    cell_types=None
+    num_classes=3,
 ):
     """
     Function to tweak thresholds for masks, nms and confidence.
@@ -103,15 +102,16 @@ def tweak_thresholds(
         thresholds_mask (list of floats): Mask thresholds.
         thresholds_nms (list of floats): NMS thresholds
         thresholds_conf (list of floats): Confidence thresholds.
-        num_classes (int, optional): Number of classes. Defaults to 3.
         remove_overlap (bool, optional): Whether to remove overlap.. Defaults to True.
         corrupt (bool, optional): Whether to corrupt astro cells. Defaults to True.
-        cell_types (int, optional): Class indices. Defaults to None.
+        num_classes (int, optional): Number of classes. Defaults to 3.
 
     Returns:
         list of np arrays [3 x n_th_mask x n_th_nms x n_th_conf]: Scores per class for each config.
+        list of ints [len(dataset)]: Cell types.
     """
     scores = [[[[] for _ in thresholds_nms] for _ in thresholds_mask] for _ in range(num_classes)]
+    cell_types = []
 
     for idx_mask, threshold_mask in enumerate(thresholds_mask):
         for idx, (result, rle_truth) in tqdm(
@@ -120,10 +120,10 @@ def tweak_thresholds(
             boxes, masks = result
 
             cell_type_pred = np.argmax(np.bincount(boxes[:, 5].astype(int)))
-            if cell_types is None:
-                cell_type = np.argmax(np.bincount(boxes[:, 5].astype(int)))
-            else:
-                cell_type = cell_types[idx]
+            cell_type = np.argmax(np.bincount(boxes[:, 5].astype(int)))
+
+            if idx_mask == 0:
+                cell_types.append(cell_type)
 
             masks = masks > (threshold_mask * 255)
 
@@ -158,4 +158,4 @@ def tweak_thresholds(
 
     scores = [np.array(s) for s in scores]
 
-    return scores
+    return scores, cell_types

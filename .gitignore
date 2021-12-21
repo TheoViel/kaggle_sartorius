@@ -16,6 +16,7 @@ input/test/
 *.jpeg
 dataset/
 datasets/
+dataset_2/
 *.bin
 *.npy
 *.npz
