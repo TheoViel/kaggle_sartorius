@@ -122,7 +122,7 @@ class Config:
 
     extra_name = "livecell_no_shsy5y"
     use_extra_samples = False
-    use_pl = True
+    use_pl = False
 
     num_classes = 3
 
@@ -137,10 +137,10 @@ class Config:
 
     # Model
     name = "cascade"  # "cascade" "maskrcnn"
-    encoder = "resnext101"
+    encoder = "resnext101_64x4"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
-    freeze_bn = False  # True ?
+    freeze_bn = True
 
     if name == "htc":
         data_config = "configs/config_aug_semantic.py"
@@ -151,11 +151,11 @@ class Config:
     weight_decay = 0.01 if optimizer == "AdamW" else 0
     batch_size = BATCH_SIZES[name][encoder]
     val_bs = batch_size
-    loss_decay = True
+    loss_decay = False
 
     epochs = 10 * batch_size
     if use_pl or use_extra_samples:
-        epochs = epochs // 2
+        epochs = int(epochs / 5 * 2)
 
     lr = 2e-4
     warmup_prop = 0.05
@@ -188,6 +188,8 @@ if __name__ == "__main__":
     if args.encoder is not None or args.name is not None:
         config.batch_size = BATCH_SIZES[config.name][config.encoder]
         config.epochs = 10 * config.batch_size
+        if config.use_pl:
+            config.epochs = int(config.epochs / 5 * 2)
 
     if args.epochs is not None:
         config.epochs = args.epochs

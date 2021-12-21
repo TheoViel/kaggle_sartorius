@@ -33,8 +33,8 @@ def fit(
     num_classes=3,
     use_extra_samples=False,
     freeze_bn=False,
-    device="cuda",
     loss_decay=True,
+    device="cuda",
 ):
     """
     Training function.
@@ -59,12 +59,13 @@ def fit(
         num_classes (int, optional): Number of classes. Defaults to 3.
         use_extra_samples (bool, optional): Whether to use extra samples. Defaults to False.
         freeze_bn (bool, optional): Whether to freeze batchnorm layers. Defaults to False.
+        loss_decay (bool, optional): Whether to decay losses. Defaults to False.
         device (str, optional): Training device. Defaults to "cuda".
 
     Returns:
         list of tuples: Results in the MMDet format [(boxes, masks), ...].
     """
-    dt = 0.
+    dt = 0
 
     optimizer = define_optimizer(
         optimizer_name, model, lr=lr, weight_decay=weight_decay
@@ -75,13 +76,11 @@ def fit(
     )
 
     if use_extra_samples:
-        # extra_scheduling = np.clip(  # PL -
-        #     [50 * (i ** (1 + 10 / epochs) // 5) for i in range(epochs)][::-1], 0, 1000
-        # ).astype(int)
-        extra_scheduling = np.clip(  # PL
-            [100 * (i ** (1 + 10 / epochs) // 5) for i in range(epochs)][::-1], 0, 1000
+        extra_scheduling = np.clip(
+            [50 * (i ** (1 + 20 / epochs) // 5) for i in range(epochs)][::-1],
+            0,
+            min(len(train_dataset.df_extra), 800)
         ).astype(int)
-
         print(f"    -> Extra scheduling : {extra_scheduling.tolist()}\n")
     else:
         extra_scheduling = [0] * epochs
@@ -105,7 +104,7 @@ def fit(
         for batch in train_loader:
             losses = model(**batch, return_loss=True)
             if loss_decay:
-                loss, _ = custom_parse_losses(losses, epoch, epochs+1)
+                loss, _ = custom_parse_losses(losses, epoch, epochs + 1)
             else:
                 loss, _ = model.module._parse_losses(losses)
 

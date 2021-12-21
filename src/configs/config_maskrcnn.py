@@ -3,6 +3,7 @@
 num_classes = 8  # 3 + 7 for training, 8 for pretraining
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
+roi_mask_size = 14
 
 pretrained_weights = {
     "resnet50": "../input/weights/mask_rcnn_r50_fpn_mstrain-poly_3x_coco.pth",
@@ -67,7 +68,7 @@ model = dict(
         ),
         mask_roi_extractor=dict(
             type="SingleRoIExtractor",
-            roi_layer=dict(type="RoIAlign", output_size=14, sampling_ratio=0),
+            roi_layer=dict(type="RoIAlign", output_size=roi_mask_size, sampling_ratio=0),
             out_channels=256,
             featmap_strides=[2, 4, 8, 16],
         ),
@@ -124,7 +125,7 @@ model = dict(
                 neg_pos_ub=-1,
                 add_gt_as_proposals=True,
             ),
-            mask_size=28,
+            mask_size=roi_mask_size * 2,
             pos_weight=-1,
             debug=False,
         ),

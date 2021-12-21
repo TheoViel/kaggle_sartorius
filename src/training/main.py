@@ -124,10 +124,13 @@ def k_fold(config, log_folder=None):
             else:
                 df_train = df.iloc[train_idx].copy().reset_index(drop=True)
 
-            if config.use_pl:
-                df_extra = prepare_pl_data(f"pl_ensnew_{i}")
-
             df_val = df.iloc[val_idx].copy().reset_index(drop=True)
+
+            if config.use_pl:
+                df_extra = prepare_pl_data(f"pl_ensnew_{i}", fold=i, verbose=1)
+
+                for plate_well in df_extra['plate_well'].unique():
+                    assert plate_well not in df_val['plate_well'].values, f"{plate_well} in val."
 
             pipelines = define_pipelines(config.data_config)
 
