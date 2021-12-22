@@ -9,6 +9,7 @@ pretrained_weights = {
     "resnet50": "../input/weights/mask_rcnn_r50_fpn_mstrain-poly_3x_coco.pth",
     "resnet101": "../input/weights/mask_rcnn_r101_fpn_mstrain-poly_3x_coco.pth",
     "resnext101": "../input/weights/mask_rcnn_x101_32x4d_fpn_mstrain-poly_3x_coco.pth",
+    "resnext101_64x4": "../input/weights/mask_rcnn_x101_64x4d_fpn_2x_coco_20200509_224208-39d6f70c.pth",
 }
 
 pretrained_weights_livecell = {
@@ -16,6 +17,7 @@ pretrained_weights_livecell = {
     "resnext101": "../logs/pretrain/2021-11-14/2/maskrcnn_resnext101_0.pt",
     "efficientnet_b5": "../logs/pretrain/2021-12-05/1/maskrcnn_efficientnet_b5_0.pt",
     "efficientnet_b6": "../logs/pretrain/2021-12-05/3/maskrcnn_efficientnet_b6_0.pt",
+    "resnext101_64x4": "../logs/pretrain/2021-12-21/2/maskrcnn_resnext101_64x4_0.pt"
 }
 
 

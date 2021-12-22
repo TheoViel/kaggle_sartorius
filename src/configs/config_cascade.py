@@ -14,6 +14,7 @@ pretrained_weights = {
     "swin_tiny": "../input/weights/cascade_mask_rcnn_swin_tiny_patch4_window7.pth",
     "swin_small": "../input/weights/cascade_mask_rcnn_swin_small_patch4_window7.pth",
     "swin_base": "../input/weights/cascade_mask_rcnn_swin_base_patch4_window7.pth",
+    "resnext101_32x8": "../input/weights/cascade_mask_rcnn_x101_32x8d_fpn_mstrain_3x_coco_20210719_180640-9ff7e76f.pth",
 }
 
 pretrained_weights_livecell = {
@@ -25,6 +26,7 @@ pretrained_weights_livecell = {
     "efficientnet_b4": "../logs/pretrain/2021-12-05/5/cascade_efficientnet_b4_0.pt",
     "efficientnet_b5": "../logs/pretrain/2021-12-02/2/cascade_efficientnet_b5_0.pt",
     "efficientnet_b6": "../logs/pretrain/2021-12-05/0/cascade_efficientnet_b6_0.pt",
+    "resnext101_32x8": "../logs/pretrain/2021-12-22/2/cascade_resnext101_32x8_0.pt"
 }
 
 

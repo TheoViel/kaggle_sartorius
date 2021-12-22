@@ -60,6 +60,17 @@ backbones = dict(
         norm_cfg=dict(type='BN', requires_grad=True),
         style='pytorch'
     ),
+    resnext101_32x8=dict(
+        type='ResNeXt',
+        depth=101,
+        groups=32,
+        base_width=8,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=1,
+        norm_cfg=dict(type='BN', requires_grad=True),
+        style='pytorch'
+    ),
     swin_tiny=dict(
         type='SwinTransformer',
         patch_size=2,  # 4
