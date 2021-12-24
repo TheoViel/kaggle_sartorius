@@ -1,6 +1,6 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/htc/htc_r50_fpn_1x_coco.py
 
-num_classes = 3  # 3 for training, 8 for pretraining
+num_classes = 8  # 3 for training, 8 for pretraining
 mask_iou_threshold = 0.3
 bbox_iou_threshold = 0.7
 
@@ -12,6 +12,7 @@ pretrained_weights = {
 pretrained_weights_livecell = {
     "resnet50": "../logs/pretrain/2021-11-24/1/htc_resnet50_0.pt",
     "resnext101": "../logs/pretrain/2021-11-24/2/htc_resnext101_0.pt",
+    "efficientnet_b4": "../logs/pretrain/2021-12-21/1/htc_efficientnet_b4_0.pt",
 }
 
 

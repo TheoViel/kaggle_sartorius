@@ -53,17 +53,35 @@ def inference_val(df, configs, weights, ens_config, verbose=1, cell_type=None):
         )
 
         models_trained, names = [], []
+        usage = {"cort": [], "astro": [], "shsy5y": [], "cls": []}
+
         for model_idx, model in enumerate(models):
             weight = weights[model_idx][i]
             assert weight.endswith(f'_{i}.pt'), "Wrong model weights"
             models_trained.append(load_model_weights(model, weight, verbose=verbose))
+
             names.append(weight.split('/')[-1])
+
+            if ens_config["use_for_cort"][model_idx]:
+                usage["cort"].append(model_idx)
+            if ens_config["use_for_astro"][model_idx]:
+                usage["astro"].append(model_idx)
+            if ens_config["use_for_shsy5y"][model_idx]:
+                usage["shsy5y"].append(model_idx)
+            if ens_config["use_for_cls"][model_idx]:
+                usage["cls"].append(model_idx)
+
+        if verbose:
+            for c in usage.keys():
+                print(f'Models used for {c} :\n', [names[idx] for idx in usage[c]])
+            print()
 
         model = MMDataParallel(
             EnsembleModel(
                 models_trained,
                 ens_config,
                 names=names,
+                usage=usage,
             )
         )
 

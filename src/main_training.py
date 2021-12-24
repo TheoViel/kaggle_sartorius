@@ -38,6 +38,8 @@ BATCH_SIZES = {
     "htc": {
         "resnet50": 3,
         "resnext101": 2,
+        "efficientnet_b4": 2,
+        "efficientnet_b5": 2,
     },
 }
 
@@ -126,8 +128,8 @@ class Config:
 
     num_classes = 3
 
-    data_config = "configs/config_aug.py"
-    # data_config = "configs/config_aug_extra.py"  # flip_paste
+    # data_config = "configs/config_aug.py"
+    data_config = "configs/config_aug_geo.py"
 
     # k-fold
     split = "gkf"
@@ -137,7 +139,7 @@ class Config:
 
     # Model
     name = "cascade"  # "cascade" "maskrcnn"
-    encoder = "resnext101_64x4"
+    encoder = "resnext101"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
     freeze_bn = True
@@ -153,7 +155,7 @@ class Config:
     val_bs = batch_size
     loss_decay = False
 
-    epochs = 10 * batch_size
+    epochs = 15 * batch_size
     if use_pl or use_extra_samples:
         epochs = int(epochs / 5 * 2)
 

@@ -9,6 +9,7 @@ pretrained_weights = {
     "resnet50": "../input/weights/mask_rcnn_r50_fpn_mstrain-poly_3x_coco.pth",
     "resnet101": "../input/weights/mask_rcnn_r101_fpn_mstrain-poly_3x_coco.pth",
     "resnext101": "../input/weights/mask_rcnn_x101_32x4d_fpn_mstrain-poly_3x_coco.pth",
+    "resnext101_64x4": "../input/weights/mask_rcnn_x101_64x4d_fpn_2x_coco.pth",
 }
 
 pretrained_weights_livecell = {

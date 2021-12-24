@@ -260,3 +260,74 @@ def process_results(
         all_boxes.append(boxes)
 
     return all_masks, all_boxes, cell_types
+
+
+def process_results_nothresh(
+    results, thresholds_mask, thresholds_nms, thresholds_conf
+):
+    """
+    Complete results processing function.
+
+    Args:
+        results (list of tuples [n]): Results in the MMDet format [(boxes, masks), ...].
+        thresholds_mask (list of float [3]): Thresholds per class for masks.
+        thresholds_nms (list of float [3]): Thresholds per class for nms.
+        thresholds_conf (list of float [3]): Thresholds per class for confidence.
+
+    Returns:
+        list of np arrays [n]: Masks.
+        list of np arrays [n]: Boxes.
+        list of ints [n]: Cell types.
+    """
+    all_masks, all_boxes, cell_types = [], [], []
+
+    for result in tqdm(results):
+        boxes, masks = result
+
+        # Cell type
+        cell = np.argmax(np.bincount(boxes[:, 5].astype(int)))
+        cell_types.append(cell)
+
+        # Thresholds
+        thresh_mask = (
+            thresholds_mask if isinstance(thresholds_mask, (float, int))
+            else thresholds_mask[cell]
+        )
+        thresh_nms = (
+            thresholds_nms if isinstance(thresholds_nms, (float, int))
+            else thresholds_nms[cell]
+        )
+        thresh_conf = (
+            thresholds_conf if isinstance(thresholds_conf, (float, int))
+            else thresholds_conf[cell]
+        )
+
+        # Binarize
+        masks_prob = masks.copy()
+        masks = masks > (thresh_mask * 255)
+
+        # Sort by decreasing conf
+        order = np.argsort(boxes[:, 4])[::-1]
+        masks = masks[order]
+        masks_prob = masks_prob[order]
+        boxes = boxes[order]
+
+        # Remove low confidence
+        last = (
+            np.argmax(boxes[:, 4] < thresh_conf) if np.min(boxes[:, 4]) < thresh_conf
+            else len(boxes)
+        )
+        masks = masks[:last]
+        boxes = boxes[:last]
+        masks_prob = masks_prob[:last]
+
+        # NMS
+        if thresh_nms > 0:
+            masks, boxes, picks = mask_nms(masks, boxes, thresh_nms)
+            masks_prob = masks_prob[picks]
+            assert masks_prob.shape == masks.shape
+
+        all_masks.append(masks_prob)
+        all_boxes.append(boxes)
+
+    return all_masks, all_boxes, cell_types
