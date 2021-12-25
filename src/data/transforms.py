@@ -129,21 +129,22 @@ def get_transfos(size=SIZE, augment=True, visualize=False, mean=MEAN, std=STD, )
     if augment:
         return albu.Compose(
             [
-                albu.RandomCrop(size, size),
+                # albu.RandomCrop(size, size),
                 albu.HorizontalFlip(p=0.5),
                 albu.VerticalFlip(p=0.5),
+                # albu.ShiftScaleRotate(p=0.5),
                 # distortion_transforms(p=0.5),
-                noise_transforms(p=0.5),
-                color_transforms(p=0.5),
-                blur_transforms(p=0.5),
-                albu.CLAHE(p=0.1),
+                # noise_transforms(p=0.5),
+                # color_transforms(p=0.5),
+                # blur_transforms(p=0.5),
+                # albu.CLAHE(p=0.1),
                 normalizer,
             ]
         )
     else:
         return albu.Compose(
             [
-                albu.CenterCrop(size, size),
+                # albu.CenterCrop(size, size),
                 # albu.PadIfNeeded(
                 #     min_height=None, min_width=None, pad_height_divisor=32, pad_width_divisor=32
                 # ),
@@ -165,9 +166,9 @@ def get_transfos_inference(mean=MEAN, std=STD):
     """
     return albu.Compose(
         [
-            albu.PadIfNeeded(
-                min_height=None, min_width=None, pad_height_divisor=32, pad_width_divisor=32
-            ),
+            # albu.PadIfNeeded(
+            #     min_height=None, min_width=None, pad_height_divisor=32, pad_width_divisor=32
+            # ),
             albu.Normalize(mean=mean, std=std),
             AT.transforms.ToTensorV2(),
         ],

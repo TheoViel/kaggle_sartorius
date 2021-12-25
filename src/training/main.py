@@ -1,24 +1,21 @@
 import gc
+import glob
 import torch
-from sklearn.model_selection import StratifiedKFold
+import numpy as np
+from sklearn.model_selection import GroupKFold
 
 from training.train import fit
 from model_zoo.models import define_model
 
-from data.preparation import prepare_data
+from data.preparation import get_plate_wells
 from data.transforms import get_transfos, get_transfos_inference
 from data.dataset import SartoriusDataset
-
 from inference.predict import predict
-from inference.post_process import preds_to_instance, remove_padding
-
 from utils.torch import seed_everything, count_parameters, save_model_weights
-from utils.metrics import iou_map
-
-from params import CELL_TYPES, ORIG_SIZE
+from utils.metrics import dice_score
 
 
-def train(config, df_train, df_val, fold, log_folder=None):
+def train(config, paths_train, paths_val, fold, log_folder=None):
     """
     Trains a model.
     TODO
@@ -48,27 +45,31 @@ def train(config, df_train, df_val, fold, log_folder=None):
 
     n_parameters = count_parameters(model)
 
-    transforms_train = get_transfos(
-        size=config.size, mean=model.mean, std=model.std
-    )
-    transforms_val = get_transfos(
-        size=config.size_val, augment=False, mean=model.mean, std=model.std
-    )
+    transforms_train = get_transfos(mean=model.mean, std=model.std)
+    transforms_val = get_transfos(augment=False, mean=model.mean, std=model.std)
 
     train_dataset = SartoriusDataset(
-        df_train,
+        paths_train,
         transforms=transforms_train,
     )
     val_dataset = SartoriusDataset(
-        df_val,
+        paths_val,
         transforms=transforms_val,
     )
 
+    val_dataset_ = SartoriusDataset(paths_val)
+    ref_dice = 0
+    for i in range(len(val_dataset)):
+        img, mask, y = val_dataset_[i]
+        # print(img[1:2].shape, img[1:2].max(), mask.shape)
+        ref_dice += dice_score(img[:, :, 1][None] > (0.45 * 255), mask[None])
+
     print(f"    -> {len(train_dataset)} training images")
     print(f"    -> {len(val_dataset)} validation images")
-    print(f"    -> {n_parameters} trainable parameters\n")
+    print(f"    -> {n_parameters} trainable parameters")
+    print(f"    -> Reference dice : {ref_dice / len(val_dataset) :.4f}\n")
 
-    fit(
+    preds_mask, preds_cls = fit(
         model,
         train_dataset,
         val_dataset,
@@ -94,10 +95,10 @@ def train(config, df_train, df_val, fold, log_folder=None):
             cp_folder=log_folder,
         )
 
-    return model
+    return preds_mask, preds_cls
 
 
-def validate(df, model, config):
+def validate(paths, model, config):
     """
     Validation on full images.
     TODO
@@ -107,11 +108,11 @@ def validate(df, model, config):
         config (Config): Model config.
     """
     dataset = SartoriusDataset(
-        df,
+        paths,
         transforms=get_transfos_inference(mean=model.mean, std=model.std),
     )
 
-    preds, preds_cls = predict(
+    preds_mask, preds_cls = predict(
         dataset,
         model,
         activations=config.activations,
@@ -120,21 +121,10 @@ def validate(df, model, config):
         device=config.device
     )
 
-    preds = remove_padding(preds, ORIG_SIZE)
-
-    pred_cell_types = [CELL_TYPES[i] for i in preds_cls.argmax(-1)]
-
-    preds_instance = preds_to_instance(preds, pred_cell_types)
-
-    truths = [m[..., 0] for m in dataset.masks]
-    score = iou_map(truths, preds_instance)
-
-    print(f' -> Validation IoU mAP = {score:.3f}')
-
-    return preds, preds_instance, truths
+    return preds_mask, preds_cls
 
 
-def k_fold(config, log_folder=None):
+def k_fold(config, seg_fold=0, log_folder=None):
     """
     Performs a  k-fold cross validation.
     TODO
@@ -144,35 +134,32 @@ def k_fold(config, log_folder=None):
         log_folder (None or str, optional): Folder to logs results to. Defaults to None.
     """
 
-    df = prepare_data(width=config.width)
+    paths = np.array(glob.glob(config.root + f"{seg_fold}_*"))
+    plate_wells = get_plate_wells(paths)
+    n_splits = len(set(plate_wells))
 
-    skf = StratifiedKFold(n_splits=config.k, shuffle=True, random_state=config.random_state)
-    splits = list(skf.split(X=df, y=df["cell_type"]))
+    skf = GroupKFold(n_splits=n_splits)
+    splits = list(skf.split(X=paths, groups=plate_wells))
 
-    all_preds, all_preds_instance, all_truths = [], [], []
+    all_preds_mask, all_preds_cls = [], []
 
     for i, (train_idx, val_idx) in enumerate(splits):
         if i in config.selected_folds:
-            print(f"\n-------------   Fold {i + 1} / {config.k}  -------------\n")
+            print(f"\n-------------   Fold {i + 1} / {n_splits}  -------------\n")
 
-            df_train = df.iloc[train_idx].copy().reset_index(drop=True)
-            df_val = df.iloc[val_idx].copy().reset_index(drop=True)
+            paths_train = paths[train_idx]
+            paths_val = paths[val_idx]
 
-            model = train(config, df_train, df_val, i, log_folder=log_folder)
-            preds, preds_instance, truths = validate(df_val, model, config)
+            assert len(
+                set(get_plate_wells(paths_val)).intersection(set(get_plate_wells(paths_train)))
+            ) == 0, "Leak"
 
-            all_preds += [p for p in preds]
-            all_preds_instance += preds_instance
-            all_truths += truths
+            preds_mask, preds_cls = train(config, paths_train, paths_val, i, log_folder=log_folder)
 
-            if log_folder is None or len(config.selected_folds) == 1:
-                break
+            all_preds_mask.append(preds_mask)
+            all_preds_cls.append(preds_cls)
 
-            del (model, preds_instance, truths, preds)
             torch.cuda.empty_cache()
             gc.collect()
 
-    cv_score = iou_map(all_truths, all_preds_instance, verbose=0)
-    print(f'\n -> CV IoU mAP : {cv_score:.3f}')
-
-    return all_preds, all_preds_instance, all_truths
+    return all_preds_mask, all_preds_cls

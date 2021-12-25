@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import segmentation_models_pytorch
 
 from segmentation_models_pytorch.encoders import encoders
@@ -39,6 +40,13 @@ def define_model(
     Returns:
         torch model: Segmentation model.
     """
+
+    model = SimpleModel()
+    model.mean = MEAN
+    model.std = STD
+
+    return model
+
     assert decoder_name in DECODERS, "Decoder name not supported"
     assert encoder_name in ENCODERS, "Encoder name not supported"
 
@@ -56,7 +64,10 @@ def define_model(
     model.std = STD
 
     if reduce_stride:
-        model.encoder.conv1.stride = (1, 1)
+        try:
+            model.encoder.conv1.stride = (1, 1)
+        except AttributeError:
+            model.encoder._conv_stem.stride = (1, 1)
         last_block = model.decoder.blocks[-1]
         last_block.forward = lambda x, skip: forward_no_up(last_block, x, skip)
 
@@ -72,3 +83,24 @@ def forward_no_up(self, x, skip=None):
     x = self.conv2(x)
     x = self.attention2(x)
     return x
+
+
+class SimpleModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.convs = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 1, kernel_size=3, padding=1, stride=1),
+        )
+
+    def forward(self, x):
+
+        mask = self.convs(x)
+
+        # mask = x[]
+
+        return mask, torch.zeros(x.size(0)).cuda()

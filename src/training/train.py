@@ -1,5 +1,6 @@
 import time
 import torch
+import numpy as np
 from transformers import get_linear_schedule_with_warmup
 
 from training.meter import SegmentationMeter
@@ -103,6 +104,7 @@ def fit(
         metrics = meter.reset()
 
         if epoch + 1 >= first_epoch_eval:
+            preds_mask, preds_cls = [], []
             with torch.no_grad():
                 for batch in val_loader:
                     x = batch[0].to(device).float()
@@ -116,29 +118,28 @@ def fit(
                     avg_val_loss += loss / len(val_loader)
 
                     pred_mask, pred_cls = compute_activations(pred_mask, pred_cls, activations)
+                    preds_mask.append(pred_mask.cpu().numpy())
+                    preds_cls.append(pred_cls.cpu().numpy())
 
                     meter.update(pred_mask[:, 0], pred_cls, y_mask[:, 0] > 0, y_cls)
 
             metrics = meter.compute()
 
-        elapsed_time = time.time() - start_time
+        dt = time.time() - start_time
         if (epoch + 1) % verbose == 0:
-            elapsed_time = elapsed_time * verbose
+            dt = int(dt * verbose)
             lr = scheduler.get_last_lr()[0]
-            print(
-                f"Epoch {epoch + 1:02d}/{epochs:02d} \t lr={lr:.1e}\t t={elapsed_time:.0f}s\t"
-                f"loss={avg_loss:.3f}",
-                end="\t",
-            )
-            if epoch + 1 >= first_epoch_eval:
-                print(
-                    f"val_loss={avg_val_loss:.3f} \t dice={metrics['dice']:.3f} \t"
-                    f"acc={metrics['acc']:.3f}"
-                )
-            else:
-                print("")
 
-    del (train_loader, val_loader, y_mask, loss, x, y_cls, pred_cls, pred_mask)
+            string = f"Epoch {epoch + 1:02d}/{epochs:02d}\t lr={lr:.1e}\t t={dt}s\t {avg_loss:.3f}"
+
+            if epoch + 1 >= first_epoch_eval:
+                string += f"\t val_loss={avg_val_loss:.3f}\t dice={metrics['dice']:.3f}"
+                if loss_config["w_seg_loss"] < 1:
+                    string += f"\t acc={metrics['acc']:.3f}"
+
+            print(string)
+
+    del (train_loader, val_loader, y_mask, loss, x, y_cls)
     torch.cuda.empty_cache()
 
-    return meter
+    return np.concatenate(preds_mask), np.concatenate(preds_cls)

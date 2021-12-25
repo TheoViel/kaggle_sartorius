@@ -29,7 +29,8 @@ class SegmentationMeter:
         self.dice += dice_score_tensor(
             pred_mask, y_mask, threshold=self.threshold
         ) * pred_mask.size(0)
-        self.tps += (pred_cls.argmax(-1) == y_cls).sum().item()
+
+        self.tps += ((pred_cls.view(y_cls.size()) > 0.5) == y_cls).sum().item()
         self.count += pred_mask.size(0)
 
     def compute(self):

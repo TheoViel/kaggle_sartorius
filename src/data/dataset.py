@@ -1,16 +1,13 @@
-import cv2
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-
-from params import CELL_TYPES
 
 
 class SartoriusDataset(Dataset):
     """
     Segmentation dataset for training / validation.
     """
-    def __init__(self, df, transforms=None, train=True):
+    def __init__(self, paths, transforms=None):
         """
         Constructor.
 
@@ -19,35 +16,23 @@ class SartoriusDataset(Dataset):
             transforms (albumentation transforms, optional): Transforms to apply. Defaults to None.
             train (bool, optional): Indicates if the dataset is used for training. Defaults to True.
         """
-
-        self.df = df
-        self.train = train
+        self.paths = paths
         self.transforms = transforms
 
-        self.img_paths = df["img_path"].values
-        self.mask_paths = df["mask_path"].values
-
-        self.masks = [np.load(path).transpose(1, 2, 0).astype(np.int16) for path in self.mask_paths]
-        self.cell_types = df["cell_type"].values
-
-        self.y_cls = [CELL_TYPES.index(c) for c in self.cell_types]
-
     def __len__(self):
-        return self.df.shape[0]
+        return len(self.paths)
 
     def __getitem__(self, idx):
-        image = cv2.imread(self.img_paths[idx])
-        # masks = np.load(self.mask_paths[idx]).transpose(1, 2, 0).astype(np.int16)
-        masks = self.masks[idx]
+        array = np.load(self.paths[idx])
+        image = array[:3].transpose(1, 2, 0)
+        mask = array[-1]
+
+        y = torch.tensor(mask.max() > 0).float()
 
         if self.transforms:
-            transformed = self.transforms(image=image, mask=masks)
+            transformed = self.transforms(image=image, mask=mask)
             image = transformed["image"]
-            masks = transformed["mask"]
-            masks = masks.transpose(1, 2).transpose(0, 1).float()
+            mask = transformed["mask"]
+            mask = mask.unsqueeze(0).float()
 
-        masks[-1] = masks[-1] / 10000.
-
-        y = torch.tensor(self.y_cls[idx])
-
-        return image, masks, y
+        return image, mask, y

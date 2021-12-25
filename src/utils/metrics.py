@@ -46,7 +46,7 @@ def dice_scores_img_tensor(pred, truth, eps=1e-8):
 
 def dice_score(pred, truth, eps=1e-8, threshold=0.5):
     """
-    Dice metric. Only classes that are present are weighted.
+    Dice metric.
 
     Args:
         pred (np array): Predictions.

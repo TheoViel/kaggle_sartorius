@@ -61,23 +61,21 @@ class SartoriusLoss(nn.Module):
         Returns:
             torch tensor [BS]: Loss value.
         """
-        truth[:, :2] = (truth[:, :2] > 0).float()  # ignore instance id
-
         loss = 0
-        for i in range(3):
-            if self.w_bce[i]:
-                loss += self.w_bce[i] * self.bce(pred[:, i], truth[:, i]).mean((1, 2))
 
-            if self.w_focal[i]:
-                loss += self.w_focal[i] * self.focal_tversky(pred[:, i], truth[:, i]).mean(-1)
+        if self.w_bce:
+            loss += self.w_bce * self.bce(pred, truth).mean(-1).mean(-1).mean(-1)
 
-            if self.w_lovasz[i]:
-                loss += self.w_lovasz[i] * self.lovasz(pred[:, i], truth[:, i])
+        if self.w_focal:
+            loss += self.w_focal * self.focal_tversky(pred, truth).mean(-1)
 
-            if self.w_dice[i]:
-                loss += self.w_dice[i] * self.dice(pred[:, i], truth[:, i])
+        if self.w_lovasz:
+            loss += self.w_lovasz * self.lovasz(pred, truth)
 
-        return torch.div(loss, 3)
+        if self.w_dice:
+            loss += self.w_dice * self.dice(pred, truth)
+
+        return loss
 
     def compute_cls_loss(self, pred, truth):
         """
@@ -88,7 +86,7 @@ class SartoriusLoss(nn.Module):
         Returns:
             torch tensor [BS]: Loss value.
         """
-        return self.ce(pred, truth.long())
+        return self.bce(pred.float().view(truth.size()), truth.float())
 
     def __call__(
         self, pred_mask, pred_cls, y_mask, y_cls

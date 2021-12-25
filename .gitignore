@@ -21,3 +21,6 @@ datasets/
 *.npz
 input/LIVECell_dataset_2021/
 input/train_semi_supervised/
+*.pth
+output/
+
