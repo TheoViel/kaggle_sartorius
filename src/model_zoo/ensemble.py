@@ -307,6 +307,9 @@ class EnsembleModel(BaseDetector):
                 aug_masks.append(masks)
                 aug_img_metas.append(img_meta)
 
+                if not self.config['use_tta_masks']:
+                    break
+
         merged_masks = merge_aug_masks(aug_masks, aug_img_metas, None)
 
         mask_head = (
@@ -372,7 +375,7 @@ class EnsembleModel(BaseDetector):
         """
         features = self.extract_feat(imgs, img_metas)
 
-        if any(self.usage[k] != range(len(self.models)) for k in self.usage.keys()):
+        if any(self.usage[k] != list(range(len(self.models))) for k in self.usage.keys()):
             # Compute cell type and use model subsample
             cell_type, _ = self.get_cell_type(features, img_metas)
             used_models_idx = self.usage[CELL_TYPES[cell_type]]

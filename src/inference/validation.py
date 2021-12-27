@@ -94,9 +94,10 @@ def inference_val(df, configs, weights, ens_config, verbose=1, cell_type=None):
     return all_results, dfs
 
 
-def inference_single(df, configs, weights, ens_config, idx=0):
+def inference_single(df, configs, weights, ens_config, cell_type=None, idx=0):
     """
-    Inference on a single image from the first fold..
+    Inference on a single image from the first fold.
+    TODO
 
     Args:
         df (pandas DataFrame): Metadata.
@@ -121,20 +122,36 @@ def inference_single(df, configs, weights, ens_config, idx=0):
 
     for i, (train_idx, val_idx) in enumerate(splits):
         df_val = df.iloc[val_idx].copy().reset_index(drop=True)
+
+        if cell_type is not None:
+            df_val = df_val[df_val['cell_type'] == "cort"]
         df = df_val.head(idx + 1).tail(1).reset_index(drop=True)
 
         models_trained, names = [], []
+        usage = {"cort": [], "astro": [], "shsy5y": [], "cls": []}
+
         for model_idx, model in enumerate(models):
             weight = weights[model_idx][i]
             assert weight.endswith(f'_{i}.pt'), "Wrong model weights"
-            models_trained.append(load_model_weights(model, weight))
+            models_trained.append(load_model_weights(model, weight, verbose=0))
+
             names.append(weight.split('/')[-1])
+
+            if ens_config["use_for_cort"][model_idx]:
+                usage["cort"].append(model_idx)
+            if ens_config["use_for_astro"][model_idx]:
+                usage["astro"].append(model_idx)
+            if ens_config["use_for_shsy5y"][model_idx]:
+                usage["shsy5y"].append(model_idx)
+            if ens_config["use_for_cls"][model_idx]:
+                usage["cls"].append(model_idx)
 
         model = MMDataParallel(
             EnsembleModel(
                 models_trained,
                 ens_config,
                 names=names,
+                usage=usage,
             )
         )
 
