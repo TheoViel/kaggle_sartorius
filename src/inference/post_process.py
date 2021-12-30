@@ -188,15 +188,16 @@ def corrupt_mask(mask, draw_contours=False):
 
 def remove_small_masks(masks, boxes, min_size=0):
     """
-    TODO
+    Removes the smallest mask if it is smaller than min_size.
 
     Args:
-        masks ([type]): [description]
-        boxes ([type]): [description]
-        min_size (int, optional): [description]. Defaults to 0.
+        masks (np array [n x H x W]): Masks.
+        boxes (np array [n x 5]): Boxes.
+        min_size (int, optional): Minimum size. Defaults to 0.
 
     Returns:
-        [type]: [description]
+        np array [m x H x W]: Masks.
+        np array [m x 5]: Boxes.
     """
     if min_size == 0:
         return masks, boxes

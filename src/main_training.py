@@ -140,8 +140,8 @@ class Config:
     selected_folds = [0, 1, 2, 3, 4]
 
     # Model
-    name = "maskrcnn_gnws"  # "cascade" "maskrcnn"
-    encoder = "resnext50_gnws"
+    name = "maskrcnn"  # "cascade" "maskrcnn"
+    encoder = "resnet50"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
     freeze_bn = False

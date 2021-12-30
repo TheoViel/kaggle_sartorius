@@ -19,7 +19,6 @@ DELTA = 0.5  # Modify this to change the TTA shift
 class EnsembleModel(BaseDetector):
     """
     Wrapper to ensemble models.
-    TODO : update doc for all fcts
     """
     def __init__(
         self,
@@ -34,7 +33,8 @@ class EnsembleModel(BaseDetector):
         Args:
             models (list of mmdet MMDataParallel): Models to ensemble.
             config (dict): Ensemble config.
-            names (list, optional): Model names. Defaults to [].
+            names (dict, optional): Model names. Defaults to {}.
+            usage (dict, optional): Models to use for each cell type. Defaults to {}.
         """
         super().__init__()
         self.models = nn.ModuleList([model.module for model in models])
@@ -112,13 +112,14 @@ class EnsembleModel(BaseDetector):
         """
         return self.aug_test(img, img_metas, **kwargs)
 
-    def get_proposals(self, features, img_metas, used_models_idx=None, cell_type=-1):
+    def get_proposals(self, features, img_metas, used_models_idx=None):
         """
         Gets proposals. Doesn't use TTA.
 
         Args:
             features (list of torch tensors [n_models x n_tta x n_ft]): Encoder / FPN features.
             img_metas (list of dicts [n_tta]): List of MMDet image metadata.
+            used_models_idx (list of ints, optional): Indices of model to use. Defaults to None.
 
         Returns:
             list of torch tensors [1 x 5]: Proposals.
@@ -153,13 +154,12 @@ class EnsembleModel(BaseDetector):
             )
             level_counts.append(rpn_labels_lvl[rpn_scores_lvl > 0.7].size(0))
 
-        if cell_type == -1:
-            if np.sum(level_counts[-2:]) > 10:  # astro
-                cell_type = 1
-            elif np.sum(level_counts) < 4500 and level_counts[1] < 750:  # cort
-                cell_type = 2
-            else:  # shsy5y
-                cell_type = 0
+        if np.sum(level_counts[-2:]) > 10:  # astro
+            cell_type = 1
+        elif np.sum(level_counts) < 4500 and level_counts[1] < 750:  # cort
+            cell_type = 2
+        else:  # shsy5y
+            cell_type = 0
 
         proposal_list = get_rpn_boxes(
             self.models[0].rpn_head,
@@ -182,7 +182,7 @@ class EnsembleModel(BaseDetector):
             img_metas (list of dicts [n_tta]): List of MMDet image metadata.
             proposal_list ([1 x N]): Proposals.
             rcnn_cfg (mmdet Config): RCNN config.
-            cell_type (int): Cell type index.
+            used_models_idx (list of ints, optional): Indices of model to use. Defaults to None.
 
         Returns:
             torch tensor [m x 6]: Kept boxes, confidences & labels.
@@ -211,15 +211,6 @@ class EnsembleModel(BaseDetector):
                     flip_direction,
                 )
                 rois = bbox2roi([proposals])
-
-                # Not that useful ?
-                # if DELTA:
-                #     if flip_direction in ['vertical', 'diagonal']:
-                #         rois[:, 2] = torch.clamp(rois[:, 2] - DELTA, 0, img_shape[0])
-                #         rois[:, 4] = torch.clamp(rois[:, 4] - DELTA, 0, img_shape[0])
-                #     if flip_direction in ['horizontal', 'diagonal']:
-                #         rois[:, 1] = torch.clamp(rois[:, 1] - DELTA, 0, img_shape[1])
-                #         rois[:, 3] = torch.clamp(rois[:, 3] - DELTA, 0, img_shape[1])
 
                 bboxes, scores = wrapper.get_boxes(
                     model, fts, rois, img_shape, scale_factor, img_meta, self.config['num_classes']
@@ -259,14 +250,14 @@ class EnsembleModel(BaseDetector):
         Gets rcnn boxes. Adapted from :
         https://github.com/open-mmlab/mmdetection/blob/bde7b4b7eea9dd6ee91a486c6996b2d68662366d/mmdet/models/roi_heads/test_mixins.py#L282
 
-        Only hflip TTA is used.
+        TTAs are used according to the use_tta_masks parameter.
 
         Args:
             features (list of torch tensors [n_models x n_tta x n_ft]): Encoder / FPN features.
             img_metas (list of dicts [n_tta]): List of MMDet image metadata.
             det_bboxes (torch tensor [m x 5]): Boxes & confidences.
             det_labels (torch tensor [m]): Labels.
-            cell_type (int): Cell type index.
+            used_models_idx (list of ints, optional): Indices of model to use. Defaults to None.
 
         Returns:
             torch tensor [m x H x W]: Masks.
@@ -332,14 +323,15 @@ class EnsembleModel(BaseDetector):
 
     def get_cell_type(self, features, img_metas, **kwargs):
         """
-        TODO
+        Computes the cell type, as the most detected class or as defined by proposals.
 
         Args:
-            features ([type]): [description]
-            img_metas ([type]): [description]
+            features (list of torch tensors [n_models x n_tta x n_ft]): Encoder / FPN features.
+            img_metas (list of dicts [n_tta]): List of MMDet image metadata.
 
         Returns:
-            [type]: [description]
+            int: Cell type as most detect class.
+            int: Cell type defined by proposal sizes.
         """
         proposal_list, cell_type_prop = self.get_proposals(
             features, img_metas, used_models_idx=self.usage["cls"]

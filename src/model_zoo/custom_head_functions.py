@@ -25,6 +25,31 @@ def get_seg_masks(
     """
     Modified version of mmdet/models/roi_heads/mask_heads/fcn_mask_head.py
     to add the return_per_class argument.
+    This avoids a time-consuming concatenation later on.
+
+    >>> ORIGINAL DOC :
+    Get segmentation masks from mask_pred and bboxes.
+
+    Args:
+        mask_pred (Tensor or ndarray): shape (n, #class, h, w).
+            For single-scale testing, mask_pred is the direct output of
+            model, whose type is Tensor, while for multi-scale testing,
+            it will be converted to numpy array outside of this method.
+        det_bboxes (Tensor): shape (n, 4/5)
+        det_labels (Tensor): shape (n, )
+        rcnn_test_cfg (dict): rcnn testing config
+        ori_shape (Tuple): original image height and width, shape (2,)
+        scale_factor(ndarray | Tensor): If ``rescale is True``, box
+            coordinates are divided by this scale factor to fit
+            ``ori_shape``.
+        rescale (bool): If True, the resulting masks will be rescaled to
+            ``ori_shape``.
+
+    Returns:
+        list[list]: encoded masks. The c-th item in the outer list
+            corresponds to the c-th class. Given the c-th outer list, the
+            i-th item in that inner list is the mask for the i-th box with
+            class label c.
     """
     if isinstance(mask_pred, torch.Tensor):
         mask_pred = mask_pred.sigmoid()
@@ -95,10 +120,10 @@ def get_seg_masks(
 
         im_mask[(inds,) + spatial_inds] = masks_chunk
 
-    for i in range(N):
-        cls_segms[labels[i]].append(im_mask[i].detach().cpu().numpy())
-
     if return_per_class:
+        for i in range(N):
+            cls_segms[labels[i]].append(im_mask[i].detach().cpu().numpy())
+
         return cls_segms
     else:
         return im_mask
@@ -114,29 +139,28 @@ def get_rpn_boxes_single(
     cfg,
 ):
     """
-    Modified from :
-    https://github.com/open-mmlab/mmdetection/blob/ff9bc39913cb3ff5dde79d3933add7dc2561bab7/mmdet/models/dense_heads/rpn_head.py#L103
+    Modified from mmdet/models/dense_heads/rpn_head.py
+    This function requires mmdet v2.17 to work.
 
+    >>> ORIGINAL DOC :
     Transform outputs for a single batch item into bbox predictions.
 
     Args:
-        cls_score_list (list[Tensor]): Box scores from all scale
-            levels of a single image, each item has shape
-            (num_anchors * num_classes, H, W).
-        bbox_pred_list (list[Tensor]): Box energies / deltas from
-            all scale levels of a single image, each item has
-            shape (num_anchors * 4, H, W).
-        score_factor_list (list[Tensor]): Score factor from all scale
-            levels of a single image. RPN head does not need this value.
+        cls_scores (list[Tensor]): Box scores of all scale level
+            each item has shape (num_anchors * num_classes, H, W).
+        bbox_preds (list[Tensor]): Box energies / deltas of all
+            scale level, each item has shape (num_anchors * 4, H, W).
         mlvl_anchors (list[Tensor]): Anchors of all scale level
-            each item has shape (num_anchors, 4).
-        img_meta (dict): Image meta info.
+            each item has shape (num_total_anchors, 4).
+        img_shape (tuple[int]): Shape of the input image,
+            (height, width, 3).
+        scale_factor (ndarray): Scale factor of the image arrange as
+            (w_scale, h_scale, w_scale, h_scale).
         cfg (mmcv.Config): Test / postprocessing configuration,
             if None, test_cfg would be used.
         rescale (bool): If True, return boxes in original image space.
             Default: False.
-        with_nms (bool): If True, do nms before return boxes.
-            Default: True.
+
     Returns:
         Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
             are bounding box positions (tl_x, tl_y, br_x, br_y) and the
@@ -205,19 +229,33 @@ def get_rpn_boxes_single(
 
 def get_rpn_boxes(rpn_head, cls_scores, bbox_preds, img_metas, cfg):
     """
-    
+    Modified from mmdet/models/dense_heads/rpn_head.py
+    This function requires mmdet v2.17 to work.
+
+    >>> ORIGINAL DOC :
+    Transform network output for a batch into bbox predictions.
 
     Args:
-        rpn_head ([type]): [description]
-        cls_scores ([type]): [description]
-        bbox_preds ([type]): [description]
-        img_metas ([type]): [description]
-        cfg ([type], optional): [description]. Defaults to None.
-        rescale (bool, optional): [description]. Defaults to False.
-        with_nms (bool, optional): [description]. Defaults to True.
+        cls_scores (list[Tensor]): Box scores for each scale level
+            Has shape (N, num_anchors * num_classes, H, W)
+        bbox_preds (list[Tensor]): Box energies / deltas for each scale
+            level with shape (N, num_anchors * 4, H, W)
+        img_metas (list[dict]): Meta information of each image, e.g.,
+            image size, scaling factor, etc.
+        cfg (mmcv.Config | None): Test / postprocessing configuration,
+            if None, test_cfg would be used
+        rescale (bool): If True, return boxes in original image space.
+            Default: False.
+        with_nms (bool): If True, do nms before return boxes.
+            Default: True.
 
     Returns:
-        [type]: [description]
+        list[tuple[Tensor, Tensor]]: Each item in result_list is 2-tuple.
+            The first item is an (n, 5) tensor, where the first 4 columns
+            are bounding box positions (tl_x, tl_y, br_x, br_y) and the
+            5-th column is a score between 0 and 1. The second item is a
+            (n,) tensor where each item is the predicted class label of the
+            corresponding box.
     """
     assert len(cls_scores) == len(bbox_preds)
     num_levels = len(cls_scores)

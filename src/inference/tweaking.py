@@ -81,7 +81,6 @@ def evaluate_at_confidences(masks, boxes, confidences, rle_truth):
 
 def remove_small_masks_multisize(masks, min_sizes):
     """
-
     Small masks removal at different min_sizes.
 
     Args:
