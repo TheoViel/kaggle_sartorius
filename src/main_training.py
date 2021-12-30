@@ -8,6 +8,7 @@ from utils.logger import create_logger, save_config
 BATCH_SIZES = {
     "maskrcnn": {
         "resnet50": 4,
+        "resnext50": 4,
         "resnet101": 4,
         "resnext101": 4,
         "efficientnet_b4": 4,
@@ -16,6 +17,7 @@ BATCH_SIZES = {
     },
     "cascade": {
         "resnet50": 4,
+        "resnext50": 4,
         "resnext101": 3,
         "resnext101_64x4": 2,
         "swin_tiny": 4,
@@ -27,9 +29,9 @@ BATCH_SIZES = {
         "efficientnet_b5": 2,
         "efficientnet_b6": 2,
     },
-    "cascade_resnest": {
-        "resnest50": 4,
-        "resnest101": 3,
+    "maskrcnn_gnws": {
+        "resnext50_gnws": 4,
+        "resnext101_gnws": 3,
     },
     "cascade_mask_scoring": {
         "resnet50": 4,
@@ -129,7 +131,7 @@ class Config:
     num_classes = 3
 
     # data_config = "configs/config_aug.py"
-    data_config = "configs/config_aug_geo.py"
+    data_config = "configs/config_aug_extra.py"
 
     # k-fold
     split = "gkf"
@@ -138,11 +140,11 @@ class Config:
     selected_folds = [0, 1, 2, 3, 4]
 
     # Model
-    name = "cascade"  # "cascade" "maskrcnn"
-    encoder = "resnext101"
+    name = "maskrcnn_gnws"  # "cascade" "maskrcnn"
+    encoder = "resnext50_gnws"
     model_config = f"configs/config_{name}.py"
     pretrained_livecell = True
-    freeze_bn = True
+    freeze_bn = False
 
     if name == "htc":
         data_config = "configs/config_aug_semantic.py"
@@ -153,9 +155,9 @@ class Config:
     weight_decay = 0.01 if optimizer == "AdamW" else 0
     batch_size = BATCH_SIZES[name][encoder]
     val_bs = batch_size
-    loss_decay = False
+    loss_decay = True
 
-    epochs = 15 * batch_size
+    epochs = 10 * batch_size
     if use_pl or use_extra_samples:
         epochs = int(epochs / 5 * 2)
 

@@ -14,6 +14,7 @@ pretrained_weights = {
 
 pretrained_weights_livecell = {
     "resnet50": "../logs/pretrain/2021-11-12/0/maskrcnn_resnet50_0.pt",
+    "resnext50": "../logs/pretrain/2021-12-28/2/maskrcnn_resnext50_0.pt",
     "resnext101": "../logs/pretrain/2021-11-14/2/maskrcnn_resnext101_0.pt",
     "efficientnet_b5": "../logs/pretrain/2021-12-05/1/maskrcnn_efficientnet_b5_0.pt",
     "efficientnet_b6": "../logs/pretrain/2021-12-05/3/maskrcnn_efficientnet_b6_0.pt",

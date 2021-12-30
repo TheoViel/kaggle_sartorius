@@ -117,6 +117,53 @@ def remove_overlap_naive(masks, ious=None):
     return masks.cpu().numpy()
 
 
+def remove_overlap_(masks, boxes, ious=None):
+    """
+    Removes the overlap between cells.
+
+    Args:
+        masks (np array [n x H x W]): Masks.
+        ious (np array, optional): Precomputed ious between cells. Defaults to None.
+
+    Returns:
+        np array [n x H x W]: Processed masks.
+    """
+    order = np.argsort(masks.sum(-1).sum(-1))
+    masks, boxes = masks[order], boxes[order]
+
+    if ious is None:
+        rles = [pycocotools.mask.encode(np.asarray(m, order='F')) for m in masks]
+        ious = pycocotools.mask.iou(rles, rles, [0] * len(rles))
+    else:
+        ious = ious[order]
+        ious = ious.T[order].T
+
+    for i in range(len(ious)):
+        ious[i, i] = 0
+
+    to_process = np.where(ious.sum(0) > 0)[0]
+
+    if not len(to_process):
+        return masks, boxes
+
+    masks = torch.from_numpy(masks).cuda()
+
+    for idx, i in enumerate(to_process):
+        if idx == 0:
+            continue
+
+        indices = [j for j in np.where(ious[i] > 0)[0] if j < i]
+        if len(indices):
+            others = masks[indices].max(0)[0]
+            masks[i] *= ~others
+
+    masks = masks.cpu().numpy()
+
+    # assert masks.sum(0).max() == 1
+
+    return masks, boxes
+
+
 def mask_nms(masks, boxes, threshold=0.5):
     """
     Non-maximum suppression with masks.
@@ -201,10 +248,14 @@ def remove_small_masks(masks, boxes, min_size=0):
     if min_size == 0:
         return masks, boxes
 
-    to_keep = masks.sum(-1).sum(-1) > min_size
+    sizes = masks.sum(-1).sum(-1)
+    to_keep = sizes > min_size
 
-    if to_keep.max() == 0:  # no masks found, keeping only one mask
-        return masks[:1], boxes[:1]
+    if to_keep.min() == 1:
+        return masks, boxes
+
+    smallest = sizes.min()
+    to_keep = sizes > smallest
 
     return masks[to_keep], boxes[to_keep]
 
@@ -283,8 +334,9 @@ def process_results(
             masks, boxes, _ = mask_nms(masks, boxes, thresh_nms)
 
         # Remove small masks
-        max_sizes = [1000, 8000, 1000]
-        masks, boxes = remove_small_masks(masks, boxes, min_size=min_size, max_size=max_sizes[cell])
+        masks, boxes = remove_small_masks(masks, boxes, min_size=min_size)
+
+        # masks, boxes = morphology_pp(masks, boxes, cell)
 
         # Corrupt
         if corrupt and cell == 1:  # astro
@@ -293,6 +345,7 @@ def process_results(
         # Remove overlap
         if remove_overlap:
             masks = remove_overlap_naive(masks)
+            # masks, boxes = remove_overlap_(masks, boxes)
 
         all_masks.append(masks)
         all_boxes.append(boxes)

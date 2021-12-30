@@ -153,7 +153,10 @@ def pretrain(config, log_folder=None):
         config (Config): Parameters.
         log_folder (None or str, optional): Folder to logs results to. Defaults to None.
     """
-    df = prepare_extra_data(name="livecell")
+    df = prepare_extra_data(name="livecell").sample(1000)
+    if log_folder is None:
+        df = df.sample(100).reset_index(drop=True)
+        config.k = 5
 
     skf = StratifiedKFold(n_splits=config.k, shuffle=True, random_state=config.random_state)
     splits = list(skf.split(X=df, y=df["cell_type"]))

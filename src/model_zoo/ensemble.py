@@ -13,7 +13,7 @@ from model_zoo.custom_head_functions import get_rpn_boxes, get_seg_masks
 from model_zoo.merging import merge_aug_bboxes, single_class_boxes_nms
 
 
-DELTA = 0  # Modify this to change the TTA shift
+DELTA = 0.5  # Modify this to change the TTA shift
 
 
 class EnsembleModel(BaseDetector):
@@ -213,13 +213,13 @@ class EnsembleModel(BaseDetector):
                 rois = bbox2roi([proposals])
 
                 # Not that useful ?
-                if DELTA:
-                    if flip_direction in ['vertical', 'diagonal']:
-                        rois[:, 2] = torch.clamp(rois[:, 2] - DELTA, 0, img_shape[0])
-                        rois[:, 4] = torch.clamp(rois[:, 4] - DELTA, 0, img_shape[0])
-                    if flip_direction in ['horizontal', 'diagonal']:
-                        rois[:, 1] = torch.clamp(rois[:, 1] - DELTA, 0, img_shape[1])
-                        rois[:, 3] = torch.clamp(rois[:, 3] - DELTA, 0, img_shape[1])
+                # if DELTA:
+                #     if flip_direction in ['vertical', 'diagonal']:
+                #         rois[:, 2] = torch.clamp(rois[:, 2] - DELTA, 0, img_shape[0])
+                #         rois[:, 4] = torch.clamp(rois[:, 4] - DELTA, 0, img_shape[0])
+                #     if flip_direction in ['horizontal', 'diagonal']:
+                #         rois[:, 1] = torch.clamp(rois[:, 1] - DELTA, 0, img_shape[1])
+                #         rois[:, 3] = torch.clamp(rois[:, 3] - DELTA, 0, img_shape[1])
 
                 bboxes, scores = wrapper.get_boxes(
                     model, fts, rois, img_shape, scale_factor, img_meta, self.config['num_classes']
@@ -280,8 +280,7 @@ class EnsembleModel(BaseDetector):
                 if i not in used_models_idx:
                     continue
 
-            for fts, img_meta in zip(features[i][:2], img_metas[:2]):
-                # for fts, img_meta in zip(features[i], img_metas):
+            for fts, img_meta in zip(features[i][:4], img_metas[:4]):
                 fts = [ft.cuda() for ft in fts]
                 img_shape = img_meta[0]["img_shape"]
                 scale_factor = img_meta[0]["scale_factor"]

@@ -11,8 +11,8 @@ pretrained_weights = {
 }
 
 pretrained_weights_livecell = {
-    "resnet50": None,
-    "resnext101": None,
+    "resnext50_gnws": "../logs/pretrain/2021-12-27/0/maskrcnn_gnws_resnext50_gnws_0.pt",
+    "resnext101_gnws": None,
 }
 
 conv_cfg = dict(type="ConvWS")
