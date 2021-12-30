@@ -9,7 +9,6 @@ from params import ORIG_SIZE
 
 
 RESULTS_PH = {
-    # 'scale_factor': 1.,  # np.ones(4, dtype=np.float32),  # if no resizing in augs
     "pad_shape": (0, 0),
     "img_norm_cfg": None,
     "flip_direction": None,
@@ -157,7 +156,7 @@ class SartoriusDataset(Dataset):
 
 
 RESULTS_PH_INF = {
-    'scale_factor': np.ones(4, dtype=np.float32),  # if no resizing in augs
+    'scale_factor': np.ones(4, dtype=np.float32),
     "pad_shape": (0, 0),
     "img_norm_cfg": None,
     "flip_direction": None,

@@ -89,46 +89,6 @@ def prepare_extra_data(name):
     return df
 
 
-def prepare_pl_data(name, fold, verbose=0):
-    """
-    Prepares the pseudo labeled data.
-
-    Args:
-        name (str): Name of the csv file.
-        fold (int): Fold id.
-        verbose (int, optional): Whether to print infos. Defaults to 0.
-
-    Returns:
-        pandas DataFrame: metadata.
-    """
-    df = pd.read_csv(OUT_PATH + name + ".csv")
-
-    if verbose:
-        print(f'    -> Loading {len(df)} pseudo labels from file "{OUT_PATH + name}.csv"')
-
-    df['cell_type'] = df['cell_type'].apply(lambda x: x.lower())
-
-    df['img_path'] = DATA_PATH + "train_semi_supervised/" + df['filename']
-
-    df['ann'] = df['ann'].apply(ast.literal_eval)
-
-    df['plate'] = df['filename'].apply(lambda x: x.split('_')[0])
-    df['well'] = df['filename'].apply(lambda x: x.split('_')[1][:-2])
-    df['plate_well'] = df['plate'] + "_" + df['well']
-
-    df['is_extra'] = 1
-
-    # Remove image similar to val
-    df_conf = pd.read_csv(OUT_PATH + "df_extra_adv.csv")[['id', f'pred_{fold}']]
-    df = df.merge(df_conf, left_on='filename', right_on='id')
-    df = df[df[f'pred_{fold}'] < 0.25].reset_index(drop=True)
-
-    if verbose:
-        print(f'    -> Kept {len(df)} pseudo-labels with similarity to val < 0.25')
-
-    return df
-
-
 def get_splits(df, config):
     """
     Computes the splits.

@@ -117,53 +117,6 @@ def remove_overlap_naive(masks, ious=None):
     return masks.cpu().numpy()
 
 
-def remove_overlap_(masks, boxes, ious=None):
-    """
-    Removes the overlap between cells.
-
-    Args:
-        masks (np array [n x H x W]): Masks.
-        ious (np array, optional): Precomputed ious between cells. Defaults to None.
-
-    Returns:
-        np array [n x H x W]: Processed masks.
-    """
-    order = np.argsort(masks.sum(-1).sum(-1))
-    masks, boxes = masks[order], boxes[order]
-
-    if ious is None:
-        rles = [pycocotools.mask.encode(np.asarray(m, order='F')) for m in masks]
-        ious = pycocotools.mask.iou(rles, rles, [0] * len(rles))
-    else:
-        ious = ious[order]
-        ious = ious.T[order].T
-
-    for i in range(len(ious)):
-        ious[i, i] = 0
-
-    to_process = np.where(ious.sum(0) > 0)[0]
-
-    if not len(to_process):
-        return masks, boxes
-
-    masks = torch.from_numpy(masks).cuda()
-
-    for idx, i in enumerate(to_process):
-        if idx == 0:
-            continue
-
-        indices = [j for j in np.where(ious[i] > 0)[0] if j < i]
-        if len(indices):
-            others = masks[indices].max(0)[0]
-            masks[i] *= ~others
-
-    masks = masks.cpu().numpy()
-
-    # assert masks.sum(0).max() == 1
-
-    return masks, boxes
-
-
 def mask_nms(masks, boxes, threshold=0.5):
     """
     Non-maximum suppression with masks.
@@ -271,13 +224,13 @@ def process_results(
 ):
     """
     Complete results processing function.
-    TODO
 
     Args:
         results (list of tuples [n]): Results in the MMDet format [(boxes, masks), ...].
         thresholds_mask (list of float [3]): Thresholds per class for masks.
         thresholds_nms (list of float [3]): Thresholds per class for nms.
         thresholds_conf (list of float [3]): Thresholds per class for confidence.
+        min_sizes (list of ints [3]): Cell minimum sizes.
         remove_overlap (bool, optional): Whether to remove overlap. Defaults to True.
         corrupt (bool, optional): Whether to corrupt astro masks. Defaults to True.
 

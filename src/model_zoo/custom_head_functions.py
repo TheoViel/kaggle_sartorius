@@ -114,23 +114,29 @@ def get_rpn_boxes_single(
     cfg,
 ):
     """
-    Modified from mmdet/models/dense_heads/rpn_head.py
+    Modified from :
+    https://github.com/open-mmlab/mmdetection/blob/ff9bc39913cb3ff5dde79d3933add7dc2561bab7/mmdet/models/dense_heads/rpn_head.py#L103
 
     Transform outputs for a single batch item into bbox predictions.
 
-        Args:
-        cls_scores (list[Tensor]): Box scores of all scale level
-            each item has shape (num_anchors * num_classes, H, W).
-        bbox_preds (list[Tensor]): Box energies / deltas of all
-            scale level, each item has shape (num_anchors * 4, H, W).
+    Args:
+        cls_score_list (list[Tensor]): Box scores from all scale
+            levels of a single image, each item has shape
+            (num_anchors * num_classes, H, W).
+        bbox_pred_list (list[Tensor]): Box energies / deltas from
+            all scale levels of a single image, each item has
+            shape (num_anchors * 4, H, W).
+        score_factor_list (list[Tensor]): Score factor from all scale
+            levels of a single image. RPN head does not need this value.
         mlvl_anchors (list[Tensor]): Anchors of all scale level
-            each item has shape (num_total_anchors, 4).
-        img_shape (tuple[int]): Shape of the input image,
-            (height, width, 3).
-        scale_factor (ndarray): Scale factor of the image arrange as
-            (w_scale, h_scale, w_scale, h_scale).
+            each item has shape (num_anchors, 4).
+        img_meta (dict): Image meta info.
         cfg (mmcv.Config): Test / postprocessing configuration,
             if None, test_cfg would be used.
+        rescale (bool): If True, return boxes in original image space.
+            Default: False.
+        with_nms (bool): If True, do nms before return boxes.
+            Default: True.
     Returns:
         Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
             are bounding box positions (tl_x, tl_y, br_x, br_y) and the
@@ -199,8 +205,7 @@ def get_rpn_boxes_single(
 
 def get_rpn_boxes(rpn_head, cls_scores, bbox_preds, img_metas, cfg):
     """
-    TODO
-    Modified from mmdet/models/dense_heads/rpn_head.py
+    
 
     Args:
         rpn_head ([type]): [description]

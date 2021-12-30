@@ -13,7 +13,7 @@ def mask_nms_multithresh(masks, boxes, thresholds=[0.5], ious=None):
     Args:
         masks (np array [n x H x W]): Masks.
         boxes (np array [n x 5]): Boxes & confidences.
-        threshold (list of floats, optional): IoU thresholds. Defaults to [0.5].
+        thresholds (list of floats, optional): IoU thresholds. Defaults to [0.5].
         ious  (np array, optional): Precomputed ious. Defaults to None.
 
     Returns:
@@ -64,10 +64,6 @@ def evaluate_at_confidences(masks, boxes, confidences, rle_truth):
     Returns:
         list: Scores
     """
-    # order = np.argsort(boxes[:, 4])[::-1]
-    # masks = masks[order]
-    # boxes = boxes[order]
-    # assert confidences == sorted(confidences)
 
     lasts = []
     for thresh in confidences:
@@ -84,6 +80,17 @@ def evaluate_at_confidences(masks, boxes, confidences, rle_truth):
 
 
 def remove_small_masks_multisize(masks, min_sizes):
+    """
+
+    Small masks removal at different min_sizes.
+
+    Args:
+        masks (np array [n x H x W]): Masks.
+        min_sizes (list of ints): Min sizes.
+
+    Returns:
+        list of lists: Kept indices at different sizes.
+    """
     sizes = masks.sum(-1).sum(-1)
 
     picks = []
@@ -112,7 +119,7 @@ def tweak_thresholds(
     num_classes=3,
 ):
     """
-    Function to tweak thresholds for masks, nms and confidence.
+    Function to tweak parameters for masks, nms, confidence and min cell size.
 
     Args:
         results (list of tuples): Results in the MMDet format [(boxes, masks), ...].
@@ -120,6 +127,7 @@ def tweak_thresholds(
         thresholds_mask (list of floats): Mask thresholds.
         thresholds_nms (list of floats): NMS thresholds
         thresholds_conf (list of floats): Confidence thresholds.
+        min_sizes (list of ints): Cell minimum sizes.
         remove_overlap (bool, optional): Whether to remove overlap.. Defaults to True.
         corrupt (bool, optional): Whether to corrupt astro cells. Defaults to True.
         num_classes (int, optional): Number of classes. Defaults to 3.
