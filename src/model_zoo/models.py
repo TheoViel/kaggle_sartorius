@@ -1,10 +1,8 @@
-import re
 import sys
 import mmcv
 import torch
 import logging
 
-from collections import OrderedDict
 from mmcv.parallel import MMDataParallel
 from mmdet.models.builder import build_detector
 
@@ -96,10 +94,6 @@ def load_pretrained_weights(model, weights, verbose=0, adapt_swin=False):
     if "state_dict" in dic.keys():  # coco pretrained
         dic = dic["state_dict"]
 
-    # Swin
-    if adapt_swin:
-        dic = adapt_swin_weights(dic)
-
     # Remove classification layers
     for k in list(dic.keys()):
         if "fc_cls" in k or "fc_reg" in k or "conv_logits" in k:
@@ -112,45 +106,7 @@ def load_pretrained_weights(model, weights, verbose=0, adapt_swin=False):
         incompatible_keys = model.module.load_state_dict(dic, strict=False)
 
     allowed_missing = ["fc_cls", "fc_reg", "conv_logits", "mask_iou_head"]
-    if adapt_swin:
-        allowed_missing += ["roi_head"]
-
     for k in incompatible_keys.missing_keys:
         assert any([allowed in k for allowed in allowed_missing]), f"Missing key in dict: {k}"
 
     return model
-
-
-def adapt_swin_weights(w):
-    """
-    Adapts weights for swin transformers.
-
-    Args:
-        w (OrderedDict): Weights.
-
-    Returns:
-        OrderedDict: Adapted weights.
-    """
-    new_w = OrderedDict()
-
-    for k in w:
-        if "backbone" not in k:
-            if "roi_head.bbox_head" not in k:  # ignore roi_head
-                new_w[k] = w[k]
-        else:
-            # rename
-            new_k = re.sub("layers", "stages", k)
-            new_k = re.sub("patch_embed.proj", "patch_embed.projection", new_k)
-            new_k = re.sub("attn.", "attn.w_msa.", new_k)
-            new_k = re.sub("mlp.", "ffn.", new_k)
-            new_k = re.sub("ffn.fc1", "ffn.layers.0.0", new_k)
-            new_k = re.sub("ffn.fc2", "ffn.layers.1", new_k)
-
-            new_w[new_k] = w[k]
-
-    # reduce stride
-    new_w["backbone.patch_embed.projection.weight"] = new_w[
-        "backbone.patch_embed.projection.weight"
-    ][:, :, :2, :2]
-
-    return new_w

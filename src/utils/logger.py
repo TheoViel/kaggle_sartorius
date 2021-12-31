@@ -4,6 +4,7 @@ import json
 import shutil
 import datetime
 import numpy as np
+from distutils.dir_util import copy_tree
 
 
 class Config:
@@ -104,3 +105,14 @@ def save_config(config, folder):
 
     with open(folder + "config.json", "w") as f:
         json.dump(dic, f)
+
+
+def save_to_folder(exp_folders, root="../datasets/", name="dataset_tmp/"):
+    assert not os.path.exists(root + name)
+    os.mkdir(root + name)
+
+    for folder in exp_folders:
+        f = folder.split('/')[-3] + "_" + folder.split('/')[-2]
+        print(f'Saving to {root + name + f}')
+        os.mkdir(root + name + f)
+        copy_tree(folder[:-1], root + name + f)

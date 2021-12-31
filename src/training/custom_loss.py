@@ -8,6 +8,7 @@ def custom_parse_losses(losses, current_epoch, max_epoch):
     Adapted from :
     https://github.com/open-mmlab/mmdetection/blob/f3817df55709e4b13098ebaa9cf72a77b68ce994/mmdet/models/detectors/base.py#L176
     Parse the raw outputs (losses) of the network.
+    Losses are decayed to put more emphasis on the mask loss.
 
     Args:
         losses (dict): Raw output of the network, which contains losses and other necessary info.

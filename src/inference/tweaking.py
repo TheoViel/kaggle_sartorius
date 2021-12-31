@@ -13,7 +13,7 @@ def mask_nms_multithresh(masks, boxes, thresholds=[0.5], ious=None):
     Args:
         masks (np array [n x H x W]): Masks.
         boxes (np array [n x 5]): Boxes & confidences.
-        threshold (list of floats, optional): IoU thresholds. Defaults to [0.5].
+        thresholds (list of floats, optional): IoU thresholds. Defaults to [0.5].
         ious  (np array, optional): Precomputed ious. Defaults to None.
 
     Returns:
@@ -64,10 +64,6 @@ def evaluate_at_confidences(masks, boxes, confidences, rle_truth):
     Returns:
         list: Scores
     """
-    # order = np.argsort(boxes[:, 4])[::-1]
-    # masks = masks[order]
-    # boxes = boxes[order]
-    # assert confidences == sorted(confidences)
 
     lasts = []
     for thresh in confidences:
@@ -83,18 +79,46 @@ def evaluate_at_confidences(masks, boxes, confidences, rle_truth):
     return scores
 
 
+def remove_small_masks_multisize(masks, min_sizes):
+    """
+    Small masks removal at different min_sizes.
+
+    Args:
+        masks (np array [n x H x W]): Masks.
+        min_sizes (list of ints): Min sizes.
+
+    Returns:
+        list of lists: Kept indices at different sizes.
+    """
+    sizes = masks.sum(-1).sum(-1)
+
+    picks = []
+    for min_size in min_sizes:
+        to_keep = sizes > min_size
+
+        if to_keep.max() == 0:  # no masks found, keeping only one mask
+            pick = np.zeros(1)
+        else:
+            pick = np.where(to_keep)[0]
+
+        picks.append(pick)
+
+    return picks
+
+
 def tweak_thresholds(
     results,
     dataset,
     thresholds_mask,
     thresholds_nms,
     thresholds_conf,
+    min_sizes=None,
     remove_overlap=True,
     corrupt=True,
     num_classes=3,
 ):
     """
-    Function to tweak thresholds for masks, nms and confidence.
+    Function to tweak parameters for masks, nms, confidence and min cell size.
 
     Args:
         results (list of tuples): Results in the MMDet format [(boxes, masks), ...].
@@ -102,6 +126,7 @@ def tweak_thresholds(
         thresholds_mask (list of floats): Mask thresholds.
         thresholds_nms (list of floats): NMS thresholds
         thresholds_conf (list of floats): Confidence thresholds.
+        min_sizes (list of ints): Cell minimum sizes.
         remove_overlap (bool, optional): Whether to remove overlap.. Defaults to True.
         corrupt (bool, optional): Whether to corrupt astro cells. Defaults to True.
         num_classes (int, optional): Number of classes. Defaults to 3.
@@ -110,7 +135,11 @@ def tweak_thresholds(
         list of np arrays [3 x n_th_mask x n_th_nms x n_th_conf]: Scores per class for each config.
         list of ints [len(dataset)]: Cell types.
     """
-    scores = [[[[] for _ in thresholds_nms] for _ in thresholds_mask] for _ in range(num_classes)]
+    scores = [
+        [[[[] for _ in min_sizes] for _ in thresholds_nms] for _ in thresholds_mask]
+        for _ in range(num_classes)
+    ]
+
     cell_types = []
 
     for idx_mask, threshold_mask in enumerate(thresholds_mask):
@@ -119,7 +148,6 @@ def tweak_thresholds(
         ):
             boxes, masks = result
 
-            cell_type_pred = np.argmax(np.bincount(boxes[:, 5].astype(int)))
             cell_type = np.argmax(np.bincount(boxes[:, 5].astype(int)))
 
             if idx_mask == 0:
@@ -136,25 +164,35 @@ def tweak_thresholds(
             ious = pycocotools.mask.iou(rles, rles, [0] * len(rles))
 
             # NMS
-            picks = mask_nms_multithresh(masks, boxes, thresholds_nms, ious=ious)
+            picks_nms = mask_nms_multithresh(masks, boxes, thresholds_nms, ious=ious)
+
+            picks_size = remove_small_masks_multisize(masks, min_sizes)
 
             # Evaluation for different confidences
-            for idx_nms, pick in enumerate(picks):
-                masks_picked = masks[pick]
+            for idx_nms, pick_nms in enumerate(picks_nms):
+                for idx_size, pick_size in enumerate(picks_size):
+                    # pick = pick_nms
+                    # print(pick_nms)
+                    pick = sorted(np.array(list(set(pick_nms).intersection(set(pick_size)))))
+                    # print(pick)
 
-                if corrupt and cell_type_pred == 1:  # astro
-                    masks_picked = np.array([corrupt_mask(mask)[0] for mask in masks_picked])
+                    masks_picked = masks[pick]
 
-                if remove_overlap:
-                    masks_picked = remove_overlap_naive(masks_picked, ious=ious[pick].T[pick])
+                    if corrupt and cell_type == 1:  # astro
+                        masks_picked = np.array([corrupt_mask(mask)[0] for mask in masks_picked])
 
-                score = evaluate_at_confidences(
-                    masks_picked,
-                    boxes[pick],
-                    thresholds_conf,
-                    rle_truth,
-                )
-                scores[cell_type][idx_mask][idx_nms].append(score)
+                    if remove_overlap:
+                        masks_picked = remove_overlap_naive(
+                            masks_picked, ious=ious[pick].T[pick]
+                        )
+
+                    score = evaluate_at_confidences(
+                        masks_picked,
+                        boxes[pick],
+                        thresholds_conf,
+                        rle_truth,
+                    )
+                    scores[cell_type][idx_mask][idx_nms][idx_size].append(score)
 
     scores = [np.array(s) for s in scores]
 

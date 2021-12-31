@@ -128,33 +128,36 @@ backbones = dict(
         with_cp=False,
         convert_weights=True,
     ),
-    resnest50=dict(
-        type="ResNeSt",
-        stem_channels=64,
+    resnext50_gnws=dict(
+        type='ResNeXt',
         depth=50,
-        radix=2,
-        reduction_factor=4,
-        avg_down_stride=True,
+        groups=32,
+        base_width=4,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=-1,
-        norm_cfg=dict(type='SyncBN', requires_grad=True),
-        norm_eval=False,
-        style="pytorch",
+        style='pytorch',
+        conv_cfg=dict(type='ConvWS'),
+        norm_cfg=dict(type='GN', num_groups=32, requires_grad=True),
+        # init_cfg=dict(
+        #     type='Pretrained',
+        #     checkpoint='open-mmlab://jhu/resnext50_32x4d_gn_ws'
+        # )
     ),
-    resnest101=dict(
-        type="ResNeSt",
-        stem_channels=128,
-        depth=101,
-        radix=2,
-        reduction_factor=4,
-        avg_down_stride=True,
+    resnext50=dict(
+        type='ResNeXt',
+        depth=50,
+        groups=32,
+        base_width=4,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=-1,
-        norm_cfg=dict(type='SyncBN', requires_grad=True),
-        norm_eval=False,
-        style="pytorch",
+        style='pytorch',
+        norm_cfg=dict(type='BN', requires_grad=True),
+        init_cfg=dict(
+            type='Pretrained',
+            checkpoint='open-mmlab://resnext50_32x4d'
+        )
     ),
     efficientnetv2_s=dict(
         type="EfficientNet",

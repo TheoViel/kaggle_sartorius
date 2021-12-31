@@ -1,5 +1,6 @@
 # https://github.com/open-mmlab/mmdetection/blob/master/configs/_base_/datasets/coco_instance.py
 
+# SIZE = 256 - 64
 SIZE = 256
 # SIZE = 384
 

@@ -19,6 +19,7 @@ pretrained_weights = {
 
 pretrained_weights_livecell = {
     "resnet50": "../logs/pretrain/2021-11-21/1/cascade_resnet50_0.pt",
+    "resnext50": "../logs/pretrain/2021-12-28/1/cascade_resnext50_0.pt",
     "resnext101": "../logs/pretrain/2021-11-21/0/cascade_resnext101_0.pt",
     "resnext101_64x4": "../logs/pretrain/2021-11-27/0/cascade_resnext101_64x4_0.pt",
     "swin_small": "../logs/pretrain/2021-11-26/1/cascade_swin_small_0.pt",

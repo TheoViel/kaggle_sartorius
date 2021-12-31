@@ -186,8 +186,42 @@ def corrupt_mask(mask, draw_contours=False):
     return corrupted_mask, img_contours
 
 
+def remove_small_masks(masks, boxes, min_size=0):
+    """
+    Removes the smallest mask if it is smaller than min_size.
+
+    Args:
+        masks (np array [n x H x W]): Masks.
+        boxes (np array [n x 5]): Boxes.
+        min_size (int, optional): Minimum size. Defaults to 0.
+
+    Returns:
+        np array [m x H x W]: Masks.
+        np array [m x 5]: Boxes.
+    """
+    if min_size == 0:
+        return masks, boxes
+
+    sizes = masks.sum(-1).sum(-1)
+    to_keep = sizes > min_size
+
+    if to_keep.min() == 1:
+        return masks, boxes
+
+    smallest = sizes.min()
+    to_keep = sizes > smallest
+
+    return masks[to_keep], boxes[to_keep]
+
+
 def process_results(
-    results, thresholds_mask, thresholds_nms, thresholds_conf, remove_overlap=True, corrupt=True
+    results,
+    thresholds_mask,
+    thresholds_nms,
+    thresholds_conf,
+    min_sizes,
+    remove_overlap=True,
+    corrupt=True,
 ):
     """
     Complete results processing function.
@@ -197,6 +231,7 @@ def process_results(
         thresholds_mask (list of float [3]): Thresholds per class for masks.
         thresholds_nms (list of float [3]): Thresholds per class for nms.
         thresholds_conf (list of float [3]): Thresholds per class for confidence.
+        min_sizes (list of ints [3]): Cell minimum sizes.
         remove_overlap (bool, optional): Whether to remove overlap. Defaults to True.
         corrupt (bool, optional): Whether to corrupt astro masks. Defaults to True.
 
@@ -227,6 +262,10 @@ def process_results(
             thresholds_conf if isinstance(thresholds_conf, (float, int))
             else thresholds_conf[cell]
         )
+        min_size = (
+            min_sizes if isinstance(min_sizes, (float, int))
+            else min_sizes[cell]
+        )
 
         # Binarize
         masks = masks > (thresh_mask * 255)
@@ -248,6 +287,11 @@ def process_results(
         if thresh_nms > 0:
             masks, boxes, _ = mask_nms(masks, boxes, thresh_nms)
 
+        # Remove small masks
+        masks, boxes = remove_small_masks(masks, boxes, min_size=min_size)
+
+        # masks, boxes = morphology_pp(masks, boxes, cell)
+
         # Corrupt
         if corrupt and cell == 1:  # astro
             masks = np.array([corrupt_mask(mask)[0] for mask in masks])
@@ -255,6 +299,7 @@ def process_results(
         # Remove overlap
         if remove_overlap:
             masks = remove_overlap_naive(masks)
+            # masks, boxes = remove_overlap_(masks, boxes)
 
         all_masks.append(masks)
         all_boxes.append(boxes)

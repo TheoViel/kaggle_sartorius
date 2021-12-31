@@ -18,9 +18,8 @@ keymap = {"img": "image", "gt_masks": "masks", "gt_bboxes": "bboxes"}
 @PIPELINES.register_module()
 class FlipPaste:
     """
-    Performs flip and average images with masks
+    Adaptation of the CopyPaste augmentation to use an image and its flipped version.
     """
-
     def __init__(self, p=0.5):
         self.p = p
         self.flip = Albu([dict(type="HorizontalFlip", p=1)], keymap=keymap, bbox_params=bbox_params)

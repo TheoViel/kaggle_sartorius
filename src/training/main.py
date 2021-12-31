@@ -4,7 +4,7 @@ from training.train import fit
 from model_zoo.models import define_model
 from data.dataset import SartoriusDataset
 from data.transforms import define_pipelines
-from data.preparation import prepare_data, prepare_extra_data, get_splits, prepare_pl_data
+from data.preparation import prepare_data, prepare_extra_data, get_splits
 from utils.torch import seed_everything, count_parameters, save_model_weights, freeze_batchnorm
 
 
@@ -129,12 +129,6 @@ def k_fold(config, log_folder=None):
 
             df_val = df.iloc[val_idx].copy().reset_index(drop=True)
 
-            if config.use_pl:
-                df_extra = prepare_pl_data(f"pl_ensnew_{i}", fold=i, verbose=1)
-
-                for plate_well in df_extra['plate_well'].unique():
-                    assert plate_well not in df_val['plate_well'].values, f"{plate_well} in val."
-
             pipelines = define_pipelines(config.data_config)
 
             results = train(
@@ -157,6 +151,9 @@ def pretrain(config, log_folder=None):
         log_folder (None or str, optional): Folder to logs results to. Defaults to None.
     """
     df = prepare_extra_data(name="livecell")
+    if log_folder is None:
+        df = df.sample(100).reset_index(drop=True)
+        config.k = 5
 
     skf = StratifiedKFold(n_splits=config.k, shuffle=True, random_state=config.random_state)
     splits = list(skf.split(X=df, y=df["cell_type"]))
