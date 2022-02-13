@@ -52,6 +52,7 @@ We did a lot of hyper-parameters tweaking on CV : NMS thresholds, RPN and bbox_h
 
 - Download the data :
   - Put the competition data from [Kaggle](https://www.kaggle.com/c/sartorius-cell-instance-segmentation/data) in the `input` folder
+  - Put [Heng's corrected masks](https://www.kaggle.com/hengck23/clean-astro-mask) in the `input/hck_fix` folder.
   - We also provide our trained model weights on Kaggle : [1](www.kaggle.com/theoviel/sartorius-cps-ens11), [1](www.kaggle.com/theoviel/sartorius-cps-ens10), [1](www.kaggle.com/theoviel/sartorius-cps-last)
 
 - Prepare the data using `notebooks/Preparation.ipynb`:
