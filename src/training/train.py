@@ -151,7 +151,9 @@ def fit(
                 print()
                 pass
 
-        save_checkpoint = do_eval and (epoch >= 0.75*epochs) and (epoch != epochs) and (log_folder is not None)
+        save_checkpoint = (
+            do_eval and (epoch >= 0.75*epochs) and (epoch != epochs) and (log_folder is not None)
+        )
         if save_checkpoint:
             checkpoint_name = f"{config.name}_{config.encoder}_{fold}_epoch_{epoch}.pt"
             save_model_weights(model, checkpoint_name, cp_folder=log_folder)

@@ -3,9 +3,8 @@
 
 #### Status :
 - Document code : Done
-- Clean notebooks : Done
-- Make ReadMe : WIP
-
+- Clean notebooks : Approximately done
+- Make ReadMe : Almost done
 
 
 ## Introduction
@@ -49,21 +48,23 @@ We did a lot of hyper-parameters tweaking on CV : NMS thresholds, RPN and bbox_h
   - mmdet v2.17
   - mmcv-full>=1.3.14, <1.4.0
   - Bunch of stuff that doesn't really matter as much
+  - I use a custom version of the `fcn_mask_head.py` script : replace the one in  `mmdet/mmdet/models/roi_heads/mask_heads` with the one provided here.
 
 - Download the data :
   - Put the competition data from [Kaggle](https://www.kaggle.com/c/sartorius-cell-instance-segmentation/data) in the `input` folder
   - Put [Heng's corrected masks](https://www.kaggle.com/hengck23/clean-astro-mask) in the `input/hck_fix` folder.
   - We also provide our trained model weights on Kaggle : [1](www.kaggle.com/theoviel/sartorius-cps-ens11), [1](www.kaggle.com/theoviel/sartorius-cps-ens10), [1](www.kaggle.com/theoviel/sartorius-cps-last)
 
-- Prepare the data using `notebooks/Preparation.ipynb`:
+- Prepare the data using `notebooks/Preparation.ipynb`. This should be quite fast to run but the multiprocessing may cause issues so you may want to get rid of it.
 
-
-### Train models [TODO]
+### Train models
 
 - Pretrain models using `notebooks/Livecell.ipynb`
+  - The first part of the notebook prepares the training csv, and only needs to be run once. Uncomment the line `# annotations = []  # do not recompute` to skip the preparation.
 
-For finetuning on the competition training data, you can either use `notebooks/Training.ipynb` or the scripts in `scripts/`.
-
+- For finetuning on the competition training data, you can either use `notebooks/Training.ipynb` or the scripts in `scripts/` which call the `main_training.py` script.
+  - You can change main parameters by updating the `Config` class, the parameter naming should be straight-forward.
+  - A bunch of training configs are provided with the weights above if you need inspiration for training models.
 
 ### Validate models [TODO]
 

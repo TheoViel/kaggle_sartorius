@@ -15,6 +15,7 @@ from model_zoo.merging import merge_aug_bboxes, single_class_boxes_nms
 
 DELTA = 0.5  # Modify this to change the TTA shift
 
+
 class EnsembleModel(BaseDetector):
     """
     Wrapper to ensemble models.
